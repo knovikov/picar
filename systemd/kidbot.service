@@ -1,0 +1,18 @@
+[Unit]
+Description=KidBot PiCar-X robot
+After=network-online.target bluetooth.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__KIDBOT_USER__
+WorkingDirectory=__KIDBOT_DIR__
+Environment=PYTHONUNBUFFERED=1
+Environment=KIDBOT_CONFIG=__KIDBOT_DIR__/config.yaml
+EnvironmentFile=-__KIDBOT_DIR__/.env
+ExecStart=__KIDBOT_DIR__/run.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

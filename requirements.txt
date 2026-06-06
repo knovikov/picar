@@ -1,0 +1,6 @@
+PyYAML>=6.0
+pygame>=2.5
+fastapi>=0.115
+uvicorn[standard]>=0.30
+openai>=1.99.0
+

@@ -1,0 +1,79 @@
+robot:
+  name: "KidBot"
+  child_name: "Ярослав"
+  version: "0.1.0"
+  mock: false
+
+paths:
+  photos: "photos"
+  logs: "logs"
+  sounds: "assets/sounds"
+  music: "assets/music"
+  stories: "assets/stories"
+
+controller:
+  device_index: 0
+  poll_hz: 30
+  watchdog_timeout_seconds: 1.0
+
+  axes:
+    steering: 0
+    throttle: 3
+
+  buttons:
+    a: 0
+    b: 1
+    x: 2
+    y: 3
+    l1: 4
+    r1: 5
+    l2: 6
+    r2: 7
+    select: 8
+    start: 9
+
+  dpad:
+    hat_index: 0
+
+steering:
+  deadzone: 0.1
+  max_angle: 30
+  curve: 1.6
+  smoothing_alpha: 0.25
+
+speed:
+  deadzone: 0.1
+  max_forward: 40
+  max_reverse: 40
+  acceleration_per_second: 55
+  braking_per_second: 90
+
+head:
+  pan_min: -45
+  pan_max: 45
+  tilt_min: -30
+  tilt_max: 30
+  step: 5
+
+web:
+  host: "0.0.0.0"
+  port: 8080
+
+setup_ap:
+  enabled: true
+  auto_start_when_no_wifi: true
+  ssid: "KidBot-Setup"
+  password: "kidbot1234"
+  interface: "wlan0"
+  address: "192.168.4.1/24"
+
+openai:
+  chat_model: "gpt-5-mini"
+  vision_model: "gpt-5-mini"
+  stt_model: "gpt-4o-mini-transcribe"
+  tts_model: "gpt-4o-mini-tts"
+
+voice:
+  espeak_voice: "ru"
+  espeak_speed: 150
+  use_openai_tts: true

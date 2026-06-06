@@ -1,0 +1,11 @@
+[Unit]
+Description=KidBot git updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__KIDBOT_USER__
+WorkingDirectory=__KIDBOT_DIR__
+ExecStart=__KIDBOT_DIR__/update.sh
+

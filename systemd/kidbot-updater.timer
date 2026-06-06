@@ -1,0 +1,11 @@
+[Unit]
+Description=Run KidBot updater at boot and every day
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=24h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
