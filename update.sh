@@ -15,6 +15,10 @@ if [[ -d ".venv" ]]; then
   source .venv/bin/activate
 fi
 
+if command -v systemctl >/dev/null 2>&1; then
+  sudo -n systemctl disable --now kidbot-updater.timer || true
+fi
+
 KIDBOT_REPO_DIR="$REPO_DIR" python3 - <<'PY'
 import os
 from pathlib import Path
