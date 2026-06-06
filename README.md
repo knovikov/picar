@@ -13,10 +13,40 @@ Vision, если есть интернет и переменная `OPENAI_API_K
 
 ## 1. Установка на Raspberry Pi
 
+Самый простой способ с Mac, из локальной копии этого repo:
+
+```bash
+./tools/setup_robot.sh
+```
+
+По умолчанию скрипт подключается к `pi@picar.local`, копирует deploy key на
+Raspberry Pi, настраивает доступ к private GitHub repo, клонирует или обновляет
+проект в `/home/pi/picar`, запускает `./install.sh` и сразу стартует
+`kidbot.service`.
+
+Если hostname другой:
+
+```bash
+./tools/setup_robot.sh --host pi@192.168.1.42
+```
+
+Если хочется перезагрузить робота после установки:
+
+```bash
+./tools/setup_robot.sh --reboot
+```
+
+Обычно перезагрузка не нужна: setup-скрипт в конце делает
+`sudo systemctl restart kidbot.service`, и робот должен запуститься сразу.
+Reboot полезен только как чистый первый старт после установки системных пакетов,
+групп `bluetooth/input` или если Bluetooth/joystick ведут себя странно.
+
+Ручной запасной способ:
+
 ```bash
 cd /home/pi
-git clone <your-repo-url> picar-kidbot
-cd picar-kidbot
+git clone git@github.com-picar:knovikov/picar.git picar
+cd picar
 chmod +x install.sh run.sh update.sh tools/generate_sample_audio.py
 ./install.sh
 sudo systemctl start kidbot.service
@@ -342,50 +372,28 @@ sudo systemctl list-timers kidbot-updater.timer
 секунды. Это откатит робота на сохраненную стабильную версию и перезапустит
 сервис.
 
-Чтобы робот мог обновляться из GitHub/другого remote, на Raspberry Pi должен
-быть настроен `origin` и upstream:
+Чтобы робот мог обновляться из private GitHub repo, ему нужен read-only deploy
+key. Setup-скрипт делает это автоматически: генерирует локальный ключ в
+`.deploy-keys/`, добавляет public key в GitHub через `gh`, копирует private key
+на Raspberry Pi и настраивает SSH-алиас:
 
-```bash
-git remote add origin <repo-url>
-git push -u origin main
-```
-
-Для приватного GitHub repo удобнее всего дать роботу read-only deploy key.
-На Raspberry Pi:
-
-```bash
-ssh-keygen -t ed25519 -C "kidbot-pi" -f ~/.ssh/kidbot_github -N ""
-cat ~/.ssh/kidbot_github.pub
-```
-
-Скопируй публичный ключ в GitHub: repo `Settings` → `Deploy keys` →
-`Add deploy key`. Write access не нужен, если робот только скачивает обновления.
-
-Потом настрой SSH-алиас:
-
-```bash
-cat >> ~/.ssh/config <<'EOF'
-Host github.com-kidbot
+```text
+Host github.com-picar
   HostName github.com
   User git
-  IdentityFile ~/.ssh/kidbot_github
+  IdentityFile ~/.ssh/picar_github
   IdentitiesOnly yes
-EOF
-chmod 600 ~/.ssh/config
-ssh -T git@github.com-kidbot
 ```
 
-Клонирование или перевод существующего checkout на private repo:
+После этого `origin` на Raspberry Pi должен быть таким:
 
 ```bash
-git clone git@github.com-kidbot:knovikov/picar.git picar-kidbot
-cd picar-kidbot
-git remote set-url origin git@github.com-kidbot:knovikov/picar.git
+git remote set-url origin git@github.com-picar:knovikov/picar.git
 git branch --set-upstream-to=origin/main main
 ```
 
-После этого web update и `./update.sh` смогут делать `git fetch` /
-`git pull --ff-only` без ввода GitHub password.
+Setup-скрипт тоже делает это сам. После этого web update и `./update.sh`
+смогут делать `git fetch` / `git pull --ff-only` без ввода GitHub password.
 
 ## 11. Если пропал интернет
 
