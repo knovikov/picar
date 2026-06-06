@@ -27,7 +27,8 @@ logger = logging.getLogger("kidbot.web")
 def list_photo_files(photo_dir: Path) -> list[Path]:
     return sorted(
         (path for path in Path(photo_dir).iterdir() if path.suffix.lower() in PHOTO_EXTENSIONS),
-        key=lambda path: path.name,
+        key=lambda path: (path.stat().st_mtime, path.name),
+        reverse=True,
     )
 
 
@@ -76,6 +77,7 @@ def create_app(
     debug_store: Optional[DebugStateStore] = None,
     sounds_dir: Optional[Path] = None,
     sound_player: Optional[Callable[[Path], object]] = None,
+    capture_photo: Optional[Callable[[], Path]] = None,
 ):
     try:
         from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -98,7 +100,7 @@ def create_app(
     @app.get("/", response_class=HTMLResponse)
     def index():
         status = build_status_payload(status_provider())
-        photos = list_photo_files(photo_dir)[-12:]
+        photos = list_photo_files(photo_dir)[:12]
         sounds = list_sound_files(sounds_dir)
         return _render_index(status, photos, openai_key_status(env_path), access_point_config, sounds)
 
@@ -130,6 +132,17 @@ def create_app(
     @app.get("/api/photos")
     def api_photos():
         return [_photo_payload(path) for path in list_photo_files(photo_dir)]
+
+    @app.post("/api/photos/capture")
+    def api_capture_photo():
+        if capture_photo is None:
+            raise HTTPException(status_code=503, detail="Camera capture is unavailable")
+        try:
+            path = capture_photo()
+        except Exception as exc:
+            logger.exception("photo capture failed")
+            raise HTTPException(status_code=500, detail="Photo capture failed") from exc
+        return {"ok": True, "message": "Фото готово.", "photo": _photo_payload(path)}
 
     @app.get("/api/sounds")
     def api_sounds():
@@ -251,6 +264,7 @@ def run_web_server(
     update_manager: Optional[UpdateManager] = None,
     debug_store: Optional[DebugStateStore] = None,
     sounds_dir: Optional[Path] = None,
+    capture_photo: Optional[Callable[[], Path]] = None,
 ) -> threading.Thread:
     import uvicorn
 
@@ -264,6 +278,7 @@ def run_web_server(
         update_manager=update_manager,
         debug_store=debug_store,
         sounds_dir=sounds_dir,
+        capture_photo=capture_photo,
     )
     config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
@@ -460,6 +475,7 @@ def _render_index(
     .photo-body {{ padding: 10px; }}
     .photo-name {{ font-weight: 700; font-size: 13px; word-break: break-word; min-height: 34px; }}
     .row {{ display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
+    .photo-toolbar {{ margin: 0 0 12px; }}
     .photo-actions {{ margin-top: 10px; }}
     button, .button {{
       appearance: none;
@@ -551,6 +567,11 @@ def _render_index(
       <div class="stack">
         <section>
           <h2>Фото</h2>
+          <div class="row photo-toolbar">
+            <button class="secondary" id="capturePhotoButton" type="button">Сделать фото</button>
+            <a class="button" href="/photos">Все фото</a>
+            <span class="message" id="photoMessage"></span>
+          </div>
           <div class="photos" id="photos">{photo_cards}</div>
         </section>
 
@@ -669,6 +690,23 @@ def _render_index(
         }}
       }});
     }});
+
+    const capturePhotoButton = document.getElementById('capturePhotoButton');
+    if (capturePhotoButton) {{
+      capturePhotoButton.addEventListener('click', async () => {{
+        const message = document.getElementById('photoMessage');
+        capturePhotoButton.disabled = true;
+        message.textContent = 'Фотографирую...';
+        try {{
+          await jsonFetch('/api/photos/capture', {{ method: 'POST' }});
+          message.textContent = 'Фото готово.';
+          window.location.reload();
+        }} catch (error) {{
+          message.textContent = error.message;
+          capturePhotoButton.disabled = false;
+        }}
+      }});
+    }}
 
     document.getElementById('scanButton').addEventListener('click', async () => {{
       const message = document.getElementById('wifiMessage');

@@ -44,7 +44,15 @@ class DriveLogicTests(unittest.TestCase):
         self.assertEqual(command.speed, 0.0)
         self.assertEqual(command.steering_angle, 0.0)
 
+    def test_front_sensor_stop_blocks_forward_but_allows_reverse(self):
+        from kidbot.main import _safe_speed_for_front_sensor
+
+        config = {"front_sensor": {"stop_distance_cm": 10}}
+
+        self.assertEqual(_safe_speed_for_front_sensor(80.0, 9.5, config), 0.0)
+        self.assertEqual(_safe_speed_for_front_sensor(-40.0, 9.5, config), -40.0)
+        self.assertEqual(_safe_speed_for_front_sensor(80.0, 12.0, config), 80.0)
+
 
 if __name__ == "__main__":
     unittest.main()
-

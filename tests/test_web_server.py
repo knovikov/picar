@@ -117,6 +117,27 @@ class WebServerTests(unittest.TestCase):
         self.assertIn("bluetoothDevice", html)
         self.assertIn("/api/bluetooth/scan", html)
 
+    def test_index_contains_web_photo_capture(self):
+        from kidbot.core.web_server import _render_index
+        from kidbot.core.wifi_setup import AccessPointConfig
+
+        status = {
+            "robot_name": "KidBot",
+            "version": "0.1.0",
+            "wifi_connected": True,
+            "internet_connected": True,
+            "ip_address": "127.0.0.1",
+            "controller_connected": False,
+            "latest_error": None,
+            "uptime_seconds": 1,
+        }
+
+        html = _render_index(status, [], {"masked": "not set"}, AccessPointConfig())
+
+        self.assertIn("Сделать фото", html)
+        self.assertIn("/api/photos/capture", html)
+        self.assertIn("Все фото", html)
+
     def test_index_contains_soundboard(self):
         from kidbot.core.web_server import _render_index
         from kidbot.core.wifi_setup import AccessPointConfig
@@ -320,6 +341,46 @@ class WebServerTests(unittest.TestCase):
         self.assertEqual(sounds[0]["label"], "Рев мотора")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(played, ["engine_rev.wav"])
+
+    def test_photo_capture_api_uses_callback_and_lists_newest_first(self):
+        from fastapi.testclient import TestClient
+
+        from kidbot.core.status import SystemStatus
+        from kidbot.core.web_server import create_app
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            photo_dir = root / "photos"
+            photo_dir.mkdir()
+            older = photo_dir / "photo_older.jpg"
+            newer = photo_dir / "photo_newer.jpg"
+            older.write_bytes(b"old")
+
+            def status_provider():
+                return SystemStatus(
+                    robot_name="KidBot",
+                    version="0.1.0",
+                    wifi_connected=True,
+                    internet_connected=True,
+                    ip_address="127.0.0.1",
+                    controller_connected=False,
+                    latest_error=None,
+                    uptime_seconds=1,
+                )
+
+            def capture_photo():
+                newer.write_bytes(b"new")
+                return newer
+
+            app = create_app(photo_dir, status_provider, repo_dir=root, capture_photo=capture_photo)
+            client = TestClient(app)
+
+            capture_response = client.post("/api/photos/capture")
+            photos = client.get("/api/photos").json()
+
+        self.assertEqual(capture_response.status_code, 200)
+        self.assertEqual(capture_response.json()["photo"]["name"], "photo_newer.jpg")
+        self.assertEqual([photo["name"] for photo in photos], ["photo_newer.jpg", "photo_older.jpg"])
 
 
 if __name__ == "__main__":

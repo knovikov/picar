@@ -45,12 +45,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "steering": {"deadzone": 0.1, "max_angle": 30, "curve": 1.6, "smoothing_alpha": 0.25},
     "speed": {
         "deadzone": 0.1,
-        "max_forward": 40,
-        "max_reverse": 40,
-        "acceleration_per_second": 55,
-        "braking_per_second": 90,
+        "max_forward": 100,
+        "max_reverse": 100,
+        "acceleration_per_second": 180,
+        "braking_per_second": 260,
     },
     "head": {"pan_min": -45, "pan_max": 45, "tilt_min": -30, "tilt_max": 30, "step": 5},
+    "front_sensor": {"poll_hz": 10, "stop_distance_cm": 10},
     "web": {"host": "0.0.0.0", "port": 8080},
     "openai": {
         "chat_model": "gpt-5-mini",

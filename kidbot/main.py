@@ -84,7 +84,7 @@ def main() -> None:
         )
     )
 
-    _start_web_server(config, status, logger, env_path, debug_store)
+    _start_web_server(config, status, logger, env_path, debug_store, camera)
     voice.say(ready_sentence(str(robot_name)))
 
     controller_config = config.get("controller", {})
@@ -107,6 +107,7 @@ def main() -> None:
     last_network_check = 0.0
     last_front_sensor_check = 0.0
     last_battery_check = 0.0
+    last_front_distance_cm = _record_front_sensor(robot, debug_store, config)
     controller_was_connected = False
 
     try:
@@ -114,6 +115,10 @@ def main() -> None:
             now = time.monotonic()
             dt = now - last_time
             last_time = now
+
+            if now - last_front_sensor_check >= front_sensor_interval:
+                last_front_distance_cm = _record_front_sensor(robot, debug_store, config)
+                last_front_sensor_check = now
 
             state = controller.poll()
             status.set_controller_connected(state.connected)
@@ -126,7 +131,17 @@ def main() -> None:
                     logger.info("controller connected: %s", state.name)
                 controller_was_connected = True
                 watchdog.mark_controller_event()
-                _drive_from_controller(config, state, robot, media, steering_smoother, speed_limiter, dt, debug_store)
+                _drive_from_controller(
+                    config,
+                    state,
+                    robot,
+                    media,
+                    steering_smoother,
+                    speed_limiter,
+                    dt,
+                    debug_store,
+                    last_front_distance_cm,
+                )
                 _move_head_from_dpad(config, state, robot, debug_store)
                 _handle_button_events(button_events, actions)
                 if button_tracker.combo_long_pressed("rollback", named_buttons, ("select", "start"), hold_seconds=2.0):
@@ -144,10 +159,6 @@ def main() -> None:
                 robot.stop()
                 media.stop_engine_sound()
                 watchdog.stopped_due_to_timeout = True
-
-            if now - last_front_sensor_check >= front_sensor_interval:
-                _record_front_sensor(robot, debug_store)
-                last_front_sensor_check = now
 
             if now - last_battery_check >= battery_interval:
                 _record_battery(robot, status)
@@ -184,7 +195,14 @@ def _ensure_directories(config: dict) -> None:
         resolve_path(config, key).mkdir(parents=True, exist_ok=True)
 
 
-def _start_web_server(config: dict, status: StatusTracker, logger: logging.Logger, env_path, debug_store: DebugStateStore) -> None:
+def _start_web_server(
+    config: dict,
+    status: StatusTracker,
+    logger: logging.Logger,
+    env_path,
+    debug_store: DebugStateStore,
+    camera: Camera,
+) -> None:
     web_config = config.get("web", {})
     setup_ap_config = config.get("setup_ap", {})
     try:
@@ -198,6 +216,7 @@ def _start_web_server(config: dict, status: StatusTracker, logger: logging.Logge
             repo_dir=project_root(),
             debug_store=debug_store,
             sounds_dir=resolve_path(config, "sounds"),
+            capture_photo=camera.capture_photo,
             access_point_config=AccessPointConfig(
                 ssid=str(setup_ap_config.get("ssid", "KidBot-Setup")),
                 password=str(setup_ap_config.get("password", "kidbot1234")),
@@ -215,9 +234,16 @@ def _refresh_network_status(status: StatusTracker, network_monitor: NetworkMonit
     status.set_network(snapshot.wifi_connected, snapshot.internet_connected, snapshot.ip_address)
 
 
-def _record_front_sensor(robot: RobotHardware, debug_store: DebugStateStore) -> None:
+def _record_front_sensor(robot: RobotHardware, debug_store: DebugStateStore, config: dict | None = None) -> float | None:
     distance_cm = robot.read_front_distance_cm()
-    debug_store.record_front_sensor(distance_cm, status="ok" if distance_cm is not None else "no-data")
+    if distance_cm is None:
+        status = "no-data"
+    elif _front_obstacle_too_close(distance_cm, config or {}):
+        status = "too-close"
+    else:
+        status = "ok"
+    debug_store.record_front_sensor(distance_cm, status=status)
+    return distance_cm
 
 
 def _record_battery(robot: RobotHardware, status: StatusTracker) -> None:
@@ -260,6 +286,7 @@ def _drive_from_controller(
     speed_limiter: RateLimiter,
     dt: float,
     debug_store: DebugStateStore,
+    front_distance_cm: float | None = None,
 ) -> None:
     controller_config = config.get("controller", {})
     axes = controller_config.get("axes", {})
@@ -277,9 +304,33 @@ def _drive_from_controller(
 
     smooth_speed = speed_limiter.update(target_speed, dt)
     smooth_steering = steering_smoother.update(command.steering_angle)
+    safe_speed = _safe_speed_for_front_sensor(smooth_speed, front_distance_cm, config)
+    if safe_speed == 0.0 and smooth_speed > 0:
+        speed_limiter.reset(0.0)
+        smooth_speed = 0.0
+    else:
+        smooth_speed = safe_speed
     debug_store.record_drive(smooth_speed, smooth_steering)
     robot.drive(smooth_speed, smooth_steering)
     media.update_engine_sound(smooth_speed, config.get("engine_sound", {}))
+
+
+def _safe_speed_for_front_sensor(speed: float, front_distance_cm: float | None, config: dict) -> float:
+    if speed <= 0 or not _front_obstacle_too_close(front_distance_cm, config):
+        return speed
+    return 0.0
+
+
+def _front_obstacle_too_close(front_distance_cm: float | None, config: dict) -> bool:
+    if front_distance_cm is None:
+        return False
+    front_sensor_config = config.get("front_sensor", {})
+    if isinstance(front_sensor_config, dict) and not bool(front_sensor_config.get("enabled", True)):
+        return False
+    stop_distance_cm = 10.0
+    if isinstance(front_sensor_config, dict):
+        stop_distance_cm = float(front_sensor_config.get("stop_distance_cm", stop_distance_cm))
+    return 0 < float(front_distance_cm) <= stop_distance_cm
 
 
 def _move_head_from_dpad(config: dict, state, robot: RobotHardware, debug_store: DebugStateStore) -> None:

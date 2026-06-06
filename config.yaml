@@ -44,10 +44,10 @@ steering:
 
 speed:
   deadzone: 0.1
-  max_forward: 40
-  max_reverse: 40
-  acceleration_per_second: 55
-  braking_per_second: 90
+  max_forward: 100
+  max_reverse: 100
+  acceleration_per_second: 180
+  braking_per_second: 260
 
 engine_sound:
   enabled: true
@@ -64,7 +64,8 @@ head:
   step: 5
 
 front_sensor:
-  poll_hz: 5
+  poll_hz: 10
+  stop_distance_cm: 10
 
 battery:
   poll_seconds: 5

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -26,6 +27,7 @@ class Camera:
         self.photo_dir.mkdir(parents=True, exist_ok=True)
         self.mock = mock
         self._picamera2 = None
+        self._lock = threading.Lock()
 
         if not mock:
             self._connect_camera()
@@ -44,14 +46,15 @@ class Camera:
             self.mock = True
 
     def capture_photo(self, prefix: str = "photo") -> Path:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        path = self.photo_dir / f"{prefix}_{timestamp}.jpg"
+        with self._lock:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            path = self.photo_dir / f"{prefix}_{timestamp}.jpg"
 
-        if self.mock:
-            path.write_bytes(MOCK_JPEG)
-        else:
-            assert self._picamera2 is not None
-            self._picamera2.capture_file(str(path))
+            if self.mock:
+                path.write_bytes(MOCK_JPEG)
+            else:
+                assert self._picamera2 is not None
+                self._picamera2.capture_file(str(path))
 
         logger.info("photo saved: %s", path)
         return path
