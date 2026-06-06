@@ -9,6 +9,7 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional
 
+from kidbot.core.bluetooth_setup import connect_bluetooth_device, disconnect_bluetooth_device, scan_bluetooth_devices
 from kidbot.core.config import DEFAULT_CONFIG
 from kidbot.core.openai_health import check_openai_api_key
 from kidbot.core.secrets import openai_key_status, save_openai_api_key
@@ -120,6 +121,22 @@ def create_app(
     @app.post("/api/setup/access-point")
     def api_start_access_point():
         result = start_access_point(access_point_config)
+        return result.__dict__
+
+    @app.get("/api/bluetooth/scan")
+    def api_bluetooth_scan():
+        return [device.__dict__ for device in scan_bluetooth_devices()]
+
+    @app.post("/api/bluetooth/connect")
+    async def api_bluetooth_connect(request: Request):
+        data = await request.json()
+        result = connect_bluetooth_device(str(data.get("address", "")))
+        return result.__dict__
+
+    @app.post("/api/bluetooth/disconnect")
+    async def api_bluetooth_disconnect(request: Request):
+        data = await request.json()
+        result = disconnect_bluetooth_device(str(data.get("address", "")))
         return result.__dict__
 
     @app.get("/api/openai-key")
@@ -343,7 +360,7 @@ def _render_index(
     <header>
       <div>
         <h1>KidBot</h1>
-        <p class="hero-note">Фото, Wi-Fi и облачный мозг робота в одном месте. Большие кнопки, короткие слова, никакой паники.</p>
+        <p class="hero-note">Фото, Wi-Fi, пульт и облачный мозг робота в одном месте. Большие кнопки, короткие слова, никакой паники.</p>
       </div>
       <div class="badge"><span class="dot {'good' if status["internet_connected"] else ''}"></span>{'Интернет есть' if status["internet_connected"] else 'Setup режим'}</div>
     </header>
@@ -380,6 +397,19 @@ def _render_index(
             <button class="secondary" id="apButton" type="button">Включить setup-сеть</button>
           </div>
           <p class="message" id="wifiMessage"></p>
+        </section>
+
+        <section>
+          <h2>Пульт</h2>
+          <p class="small">Включи pairing mode на Bluetooth-пульте, потом нажми поиск. Для 8BitDo обычно нужен режим Bluetooth.</p>
+          <button class="secondary" id="bluetoothScanButton" type="button">Найти Bluetooth</button>
+          <label for="bluetoothDevice">Устройство</label>
+          <select id="bluetoothDevice"><option value="">Сначала поиск</option></select>
+          <div class="row" style="margin-top: 12px">
+            <button class="sun" id="bluetoothConnectButton" type="button">Подключить пульт</button>
+            <button class="secondary" id="bluetoothDisconnectButton" type="button">Отключить</button>
+          </div>
+          <p class="message" id="bluetoothMessage"></p>
         </section>
 
         <section>
@@ -475,6 +505,59 @@ def _render_index(
       message.textContent = 'Включаю setup-сеть...';
       try {{
         const result = await jsonFetch('/api/setup/access-point', {{ method: 'POST', body: '{{}}' }});
+        message.textContent = result.message;
+      }} catch (error) {{
+        message.textContent = error.message;
+      }}
+    }});
+
+    document.getElementById('bluetoothScanButton').addEventListener('click', async () => {{
+      const message = document.getElementById('bluetoothMessage');
+      const select = document.getElementById('bluetoothDevice');
+      message.textContent = 'Ищу пульты...';
+      try {{
+        const devices = await jsonFetch('/api/bluetooth/scan');
+        select.innerHTML = '';
+        if (devices.length === 0) {{
+          select.innerHTML = '<option value="">Пульты не найдены</option>';
+          message.textContent = 'Ничего не нашел. Проверь pairing mode.';
+        }} else {{
+          devices.forEach((device) => {{
+            const option = document.createElement('option');
+            const state = device.connected ? ' · подключен' : (device.paired ? ' · знакомый' : '');
+            option.value = device.address;
+            option.textContent = device.name + ' · ' + device.address + state;
+            select.appendChild(option);
+          }});
+          message.textContent = 'Готово. Выбери пульт.';
+        }}
+      }} catch (error) {{
+        message.textContent = error.message;
+      }}
+    }});
+
+    document.getElementById('bluetoothConnectButton').addEventListener('click', async () => {{
+      const message = document.getElementById('bluetoothMessage');
+      message.textContent = 'Подключаю пульт...';
+      try {{
+        const result = await jsonFetch('/api/bluetooth/connect', {{
+          method: 'POST',
+          body: JSON.stringify({{ address: document.getElementById('bluetoothDevice').value }})
+        }});
+        message.textContent = result.message;
+      }} catch (error) {{
+        message.textContent = error.message;
+      }}
+    }});
+
+    document.getElementById('bluetoothDisconnectButton').addEventListener('click', async () => {{
+      const message = document.getElementById('bluetoothMessage');
+      message.textContent = 'Отключаю пульт...';
+      try {{
+        const result = await jsonFetch('/api/bluetooth/disconnect', {{
+          method: 'POST',
+          body: JSON.stringify({{ address: document.getElementById('bluetoothDevice').value }})
+        }});
         message.textContent = result.message;
       }} catch (error) {{
         message.textContent = error.message;

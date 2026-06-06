@@ -69,6 +69,28 @@ class WebServerTests(unittest.TestCase):
         self.assertIn("limitBox", html)
         self.assertIn("/api/openai-key/check", html)
 
+    def test_index_contains_bluetooth_controller_setup(self):
+        from kidbot.core.web_server import _render_index
+        from kidbot.core.wifi_setup import AccessPointConfig
+
+        status = {
+            "robot_name": "KidBot",
+            "version": "0.1.0",
+            "wifi_connected": True,
+            "internet_connected": True,
+            "ip_address": "127.0.0.1",
+            "controller_connected": False,
+            "latest_error": None,
+            "uptime_seconds": 1,
+        }
+
+        html = _render_index(status, [], {"masked": "not set"}, AccessPointConfig())
+
+        self.assertIn("Пульт", html)
+        self.assertIn("Найти Bluetooth", html)
+        self.assertIn("bluetoothDevice", html)
+        self.assertIn("/api/bluetooth/scan", html)
+
 
 if __name__ == "__main__":
     unittest.main()

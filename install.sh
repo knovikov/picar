@@ -23,6 +23,11 @@ sudo apt-get install -y \
   ffmpeg
 
 sudo systemctl enable --now NetworkManager || true
+sudo systemctl enable --now bluetooth || true
+sudo usermod -aG bluetooth,input "$SERVICE_USER" || true
+if command -v rfkill >/dev/null 2>&1; then
+  sudo rfkill unblock bluetooth || true
+fi
 
 cd "$REPO_DIR"
 python3 -m venv --system-site-packages .venv
@@ -50,6 +55,12 @@ NMCLI_PATH="$(command -v nmcli || true)"
 if [[ -n "$NMCLI_PATH" ]]; then
   echo "$SERVICE_USER ALL=(root) NOPASSWD: $NMCLI_PATH" | sudo tee /etc/sudoers.d/kidbot-network >/dev/null
   sudo chmod 440 /etc/sudoers.d/kidbot-network
+fi
+
+BLUETOOTHCTL_PATH="$(command -v bluetoothctl || true)"
+if [[ -n "$BLUETOOTHCTL_PATH" ]]; then
+  echo "$SERVICE_USER ALL=(root) NOPASSWD: $BLUETOOTHCTL_PATH" | sudo tee /etc/sudoers.d/kidbot-bluetooth >/dev/null
+  sudo chmod 440 /etc/sudoers.d/kidbot-bluetooth
 fi
 
 SYSTEMCTL_PATH="$(command -v systemctl || true)"
