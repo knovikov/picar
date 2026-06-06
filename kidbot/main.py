@@ -101,9 +101,12 @@ def main() -> None:
     sleep_seconds = 1.0 / poll_hz
     front_sensor_config = config.get("front_sensor", {})
     front_sensor_interval = 1.0 / max(1, int(front_sensor_config.get("poll_hz", 5)))
+    battery_config = config.get("battery", {})
+    battery_interval = max(1.0, float(battery_config.get("poll_seconds", 5.0)))
     last_time = time.monotonic()
     last_network_check = 0.0
     last_front_sensor_check = 0.0
+    last_battery_check = 0.0
     controller_was_connected = False
 
     try:
@@ -143,6 +146,10 @@ def main() -> None:
             if now - last_front_sensor_check >= front_sensor_interval:
                 _record_front_sensor(robot, debug_store)
                 last_front_sensor_check = now
+
+            if now - last_battery_check >= battery_interval:
+                _record_battery(robot, status)
+                last_battery_check = now
 
             if now - last_network_check > 5.0:
                 _refresh_network_status(status, network_monitor)
@@ -208,6 +215,16 @@ def _refresh_network_status(status: StatusTracker, network_monitor: NetworkMonit
 def _record_front_sensor(robot: RobotHardware, debug_store: DebugStateStore) -> None:
     distance_cm = robot.read_front_distance_cm()
     debug_store.record_front_sensor(distance_cm, status="ok" if distance_cm is not None else "no-data")
+
+
+def _record_battery(robot: RobotHardware, status: StatusTracker) -> None:
+    battery = robot.read_battery()
+    status.set_battery(
+        percentage=battery.get("percentage"),
+        voltage=battery.get("voltage"),
+        status=str(battery.get("status", "unknown")),
+        source=str(battery.get("source", "")),
+    )
 
 
 def _maybe_start_setup_access_point(config: dict, status: StatusTracker, logger: logging.Logger, voice: Voice, mock: bool) -> None:

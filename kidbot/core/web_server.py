@@ -48,6 +48,13 @@ def build_status_payload(status: SystemStatus) -> dict[str, object]:
         "internet_connected": status.internet_connected,
         "ip_address": status.ip_address,
         "controller_connected": status.controller_connected,
+        "battery": {
+            "percentage": status.battery.percentage,
+            "voltage": status.battery.voltage,
+            "status": status.battery.status,
+            "source": status.battery.source,
+            "updated_at": status.battery.updated_at,
+        },
         "latest_error": status.latest_error,
         "uptime_seconds": round(status.uptime_seconds, 1),
     }
@@ -275,6 +282,7 @@ def _render_index(
     photo_cards = "\n".join(_render_photo_card(path) for path in photos)
     if not photo_cards:
         photo_cards = '<div class="empty">Фотографий пока нет. Нажми A на пульте, и тут появится первая добыча.</div>'
+    battery_card = _render_battery_card(status.get("battery"))
 
     return f"""
 <!doctype html>
@@ -341,6 +349,45 @@ def _render_index(
     .status-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }}
     .stat {{ border-left: 4px solid var(--sky); background: #f7fbff; padding: 10px; border-radius: 6px; }}
     .stat strong {{ display: block; font-size: 13px; color: var(--muted); margin-bottom: 3px; }}
+    .stat small {{ display: block; color: var(--muted); font-weight: 700; margin-top: 4px; }}
+    .stat.battery-ok {{ border-left-color: var(--mint); background: #f5fffb; }}
+    .stat.battery-low {{ border-left-color: var(--sun); background: #fffbeb; }}
+    .stat.battery-critical {{ border-left-color: var(--coral); background: #fff7f5; }}
+    .stat.battery-unknown {{ border-left-color: var(--muted); background: #f7f8fb; }}
+    .battery-line {{ display: flex; align-items: center; gap: 9px; font-weight: 900; }}
+    .battery-meter {{
+      position: relative;
+      width: 46px;
+      height: 20px;
+      border: 2px solid currentColor;
+      border-radius: 5px;
+      padding: 2px;
+      color: var(--muted);
+      flex: 0 0 auto;
+    }}
+    .battery-meter::after {{
+      content: "";
+      position: absolute;
+      right: -6px;
+      top: 5px;
+      width: 4px;
+      height: 8px;
+      border-radius: 0 3px 3px 0;
+      background: currentColor;
+    }}
+    .battery-fill {{
+      display: block;
+      height: 100%;
+      width: 0%;
+      border-radius: 3px;
+      background: var(--muted);
+    }}
+    .battery-ok .battery-meter {{ color: var(--mint); }}
+    .battery-low .battery-meter {{ color: #bf7d08; }}
+    .battery-critical .battery-meter {{ color: var(--coral); }}
+    .battery-ok .battery-fill {{ background: var(--mint); }}
+    .battery-low .battery-fill {{ background: var(--sun); }}
+    .battery-critical .battery-fill {{ background: var(--coral); }}
     .photos {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }}
     .photo-card {{ border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }}
     .photo-card img {{ width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: #e8edf5; font-size: 0; color: transparent; }}
@@ -443,6 +490,7 @@ def _render_index(
             <div class="stat"><strong>Версия</strong>{html.escape(str(status["version"]))}</div>
             <div class="stat"><strong>Пульт</strong>{'подключен' if status["controller_connected"] else 'не найден'}</div>
             <div class="stat"><strong>OpenAI</strong>{html.escape(key_status["masked"])}</div>
+            {battery_card}
           </div>
         </section>
 
@@ -804,6 +852,36 @@ def _render_debug_page() -> str:
     .stat small { display: block; color: var(--muted); font-weight: 800; margin-top: 4px; }
     .stat.sensor-ok { border-left-color: var(--mint); background: #f5fffb; }
     .stat.sensor-near { border-left-color: var(--coral); background: #fff7f5; }
+    .stat.battery-ok { border-left-color: var(--mint); background: #f5fffb; }
+    .stat.battery-low { border-left-color: var(--sun); background: #fffbeb; }
+    .stat.battery-critical { border-left-color: var(--coral); background: #fff7f5; }
+    .stat.battery-unknown { border-left-color: var(--muted); background: #f7f8fb; }
+    .battery-meter {
+      position: relative;
+      width: 56px;
+      height: 20px;
+      border: 2px solid var(--muted);
+      border-radius: 5px;
+      padding: 2px;
+      margin-top: 6px;
+    }
+    .battery-meter::after {
+      content: "";
+      position: absolute;
+      right: -6px;
+      top: 5px;
+      width: 4px;
+      height: 8px;
+      border-radius: 0 3px 3px 0;
+      background: var(--muted);
+    }
+    .battery-fill { display: block; height: 100%; width: 0%; border-radius: 3px; background: var(--muted); }
+    .battery-ok .battery-meter { border-color: var(--mint); }
+    .battery-ok .battery-meter::after, .battery-ok .battery-fill { background: var(--mint); }
+    .battery-low .battery-meter { border-color: #bf7d08; }
+    .battery-low .battery-meter::after, .battery-low .battery-fill { background: var(--sun); }
+    .battery-critical .battery-meter { border-color: var(--coral); }
+    .battery-critical .battery-meter::after, .battery-critical .battery-fill { background: var(--coral); }
     .controller-frame {
       width: min(100%, 720px);
       min-width: 0;
@@ -1029,6 +1107,7 @@ def _render_debug_page() -> str:
           <div class="stat"><strong>Скорость</strong><span id="driveSpeed">0</span></div>
           <div class="stat"><strong>Руль</strong><span id="driveSteering">0</span></div>
           <div class="stat" id="frontSensorCard"><strong>Передний датчик</strong><span id="frontSensorDistance">нет данных</span><small id="frontSensorStatus">waiting</small></div>
+          <div class="stat battery-unknown" id="batteryCard"><strong>Батарея</strong><span id="batteryLabel">нет данных</span><div class="battery-meter"><span class="battery-fill" id="batteryFill"></span></div><small id="batteryDetail">waiting</small></div>
         </div>
       </section>
 
@@ -1155,6 +1234,7 @@ def _render_debug_page() -> str:
 
       renderControllerLayout(controller);
       renderFrontSensor(payload.front_sensor || {});
+      renderBattery((payload.status || {}).battery || {});
 
       document.getElementById('eventConsole').textContent = (payload.events || [])
         .slice(-14)
@@ -1205,6 +1285,34 @@ def _render_debug_page() -> str:
         ? numericDistance.toFixed(1) + ' cm'
         : 'нет данных';
       document.getElementById('frontSensorStatus').textContent = isNear ? 'близко' : (frontSensor.status || 'waiting');
+    }
+
+    function renderBattery(battery) {
+      const card = document.getElementById('batteryCard');
+      const fill = document.getElementById('batteryFill');
+      const percentage = battery.percentage;
+      const voltage = battery.voltage;
+      const hasPercentage = percentage !== null && percentage !== undefined;
+      const numericPercentage = hasPercentage ? Math.max(0, Math.min(100, Number(percentage))) : 0;
+      const state = batteryState(battery.status, numericPercentage, hasPercentage);
+
+      card.classList.toggle('battery-ok', state === 'ok');
+      card.classList.toggle('battery-low', state === 'low');
+      card.classList.toggle('battery-critical', state === 'critical');
+      card.classList.toggle('battery-unknown', state === 'unknown');
+      fill.style.width = numericPercentage + '%';
+      document.getElementById('batteryLabel').textContent = hasPercentage ? Math.round(numericPercentage) + '%' : 'нет данных';
+      document.getElementById('batteryDetail').textContent = voltage !== null && voltage !== undefined
+        ? Number(voltage).toFixed(2) + ' V · ' + (battery.status || 'ok')
+        : (battery.status || 'waiting');
+    }
+
+    function batteryState(status, percentage, hasPercentage) {
+      if (status === 'critical' || status === 'low' || status === 'ok') return status;
+      if (!hasPercentage) return 'unknown';
+      if (percentage <= 10) return 'critical';
+      if (percentage <= 25) return 'low';
+      return 'ok';
     }
 
     function drawSticks(axes) {
@@ -1295,3 +1403,56 @@ def _render_photo_card(path: Path) -> str:
   </div>
 </article>
 """
+
+
+def _render_battery_card(raw_battery: object) -> str:
+    battery = _battery_view(raw_battery)
+    return f"""
+<div class="stat {battery["class_name"]}">
+  <strong>Батарея</strong>
+  <div class="battery-line">
+    <span class="battery-meter" aria-hidden="true"><span class="battery-fill" style="width: {battery["width"]}%"></span></span>
+    <span>{battery["label"]}</span>
+  </div>
+  <small>{battery["detail"]}</small>
+</div>
+"""
+
+
+def _battery_view(raw_battery: object) -> dict[str, object]:
+    battery = raw_battery if isinstance(raw_battery, dict) else {}
+    percentage = _as_float(battery.get("percentage"))
+    voltage = _as_float(battery.get("voltage"))
+    status = str(battery.get("status") or "unknown")
+    if status not in {"ok", "low", "critical"}:
+        if percentage is None:
+            status = "unknown"
+        elif percentage <= 10:
+            status = "critical"
+        elif percentage <= 25:
+            status = "low"
+        else:
+            status = "ok"
+
+    width = 0 if percentage is None else max(0, min(100, percentage))
+    label = "нет данных" if percentage is None else f"{percentage:.0f}%"
+    if voltage is None:
+        detail = html.escape(str(battery.get("status") or "waiting"))
+    else:
+        detail = f"{voltage:.2f} V · {html.escape(str(battery.get('status') or status))}"
+
+    return {
+        "class_name": f"battery-{status}",
+        "width": round(width, 1),
+        "label": html.escape(label),
+        "detail": detail,
+    }
+
+
+def _as_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

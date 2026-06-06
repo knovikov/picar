@@ -5,7 +5,7 @@ from pathlib import Path
 
 class WebServerTests(unittest.TestCase):
     def test_status_payload_and_photo_listing_work_without_starting_server(self):
-        from kidbot.core.status import SystemStatus
+        from kidbot.core.status import BatteryStatus, SystemStatus
         from kidbot.core.web_server import build_status_payload, list_photo_files
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -23,6 +23,7 @@ class WebServerTests(unittest.TestCase):
                 controller_connected=True,
                 latest_error=None,
                 uptime_seconds=12.5,
+                battery=BatteryStatus(percentage=72.0, voltage=7.84, status="ok", source="test", updated_at=123.0),
             )
 
             payload = build_status_payload(status)
@@ -30,6 +31,8 @@ class WebServerTests(unittest.TestCase):
 
             self.assertEqual(payload["robot_name"], "KidBot")
             self.assertFalse(payload["internet_connected"])
+            self.assertEqual(payload["battery"]["percentage"], 72.0)
+            self.assertEqual(payload["battery"]["voltage"], 7.84)
             self.assertEqual([photo.name for photo in photos], ["a.jpg", "b.jpg"])
 
     def test_delete_photo_file_removes_only_safe_photo_name(self):
@@ -68,6 +71,29 @@ class WebServerTests(unittest.TestCase):
         self.assertIn("Проверить ключ", html)
         self.assertIn("limitBox", html)
         self.assertIn("/api/openai-key/check", html)
+
+    def test_index_contains_battery_indicator(self):
+        from kidbot.core.web_server import _render_index
+        from kidbot.core.wifi_setup import AccessPointConfig
+
+        status = {
+            "robot_name": "KidBot",
+            "version": "0.1.0",
+            "wifi_connected": True,
+            "internet_connected": True,
+            "ip_address": "127.0.0.1",
+            "controller_connected": False,
+            "battery": {"percentage": 42, "voltage": 7.24, "status": "low"},
+            "latest_error": None,
+            "uptime_seconds": 1,
+        }
+
+        html = _render_index(status, [], {"masked": "not set"}, AccessPointConfig())
+
+        self.assertIn("Батарея", html)
+        self.assertIn("battery-meter", html)
+        self.assertIn("42%", html)
+        self.assertIn("7.24 V", html)
 
     def test_index_contains_bluetooth_controller_setup(self):
         from kidbot.core.web_server import _render_index
@@ -143,6 +169,8 @@ class WebServerTests(unittest.TestCase):
         self.assertIn("controllerGrid", html)
         self.assertIn("frontSensorDistance", html)
         self.assertIn("renderFrontSensor", html)
+        self.assertIn("batteryCard", html)
+        self.assertIn("renderBattery", html)
         self.assertIn("logConsole", html)
         self.assertIn("waveCanvas", html)
 

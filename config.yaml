@@ -58,6 +58,13 @@ head:
 front_sensor:
   poll_hz: 5
 
+battery:
+  poll_seconds: 5
+  empty_voltage: 6.4
+  low_voltage: 6.8
+  critical_voltage: 6.4
+  full_voltage: 8.4
+
 web:
   host: "0.0.0.0"
   port: 8080
