@@ -12,6 +12,7 @@ from kidbot.core.ai_vision import AIVision
 from kidbot.core.camera import Camera
 from kidbot.core.config import load_config, project_root, resolve_path
 from kidbot.core.controller import ButtonTracker, ControllerReader, map_named_buttons
+from kidbot.core.debug_state import DebugStateStore, attach_debug_log_handler
 from kidbot.core.logger import setup_logging
 from kidbot.core.media import MediaPlayer
 from kidbot.core.network import NetworkMonitor
@@ -20,6 +21,7 @@ from kidbot.core.safety import SafetyWatchdog
 from kidbot.core.secrets import apply_env_file
 from kidbot.core.smoothing import RateLimiter, Smoother
 from kidbot.core.status import StatusTracker
+from kidbot.core.updater import rollback_to_stable
 from kidbot.core.voice import Voice
 from kidbot.core.web_server import run_web_server
 from kidbot.core.wifi_setup import AccessPointConfig, start_access_point
@@ -39,6 +41,8 @@ def main() -> None:
 
     log_dir = resolve_path(config, "logs")
     setup_logging(log_dir)
+    debug_store = DebugStateStore()
+    attach_debug_log_handler(debug_store)
     logger = logging.getLogger("kidbot")
     logger.info("KidBot starting")
 
@@ -80,7 +84,7 @@ def main() -> None:
         )
     )
 
-    _start_web_server(config, status, logger, env_path)
+    _start_web_server(config, status, logger, env_path, debug_store)
     voice.say(ready_sentence(str(robot_name)))
 
     controller_config = config.get("controller", {})
@@ -107,15 +111,21 @@ def main() -> None:
 
             state = controller.poll()
             status.set_controller_connected(state.connected)
+            named_buttons = _named_buttons(config, state)
+            button_events = button_tracker.update(named_buttons)
+            debug_store.record_controller(state, named_buttons, button_events)
 
             if state.connected:
                 if not controller_was_connected:
                     logger.info("controller connected: %s", state.name)
                 controller_was_connected = True
                 watchdog.mark_controller_event()
-                _drive_from_controller(config, state, robot, steering_smoother, speed_limiter, dt)
-                _move_head_from_dpad(config, state, robot)
-                _handle_button_events(config, state, button_tracker, actions)
+                _drive_from_controller(config, state, robot, steering_smoother, speed_limiter, dt, debug_store)
+                _move_head_from_dpad(config, state, robot, debug_store)
+                _handle_button_events(button_events, actions)
+                if button_tracker.combo_long_pressed("rollback", named_buttons, ("select", "start"), hold_seconds=2.0):
+                    voice.say("Откатываюсь на стабильную версию.")
+                    rollback_to_stable(project_root())
             else:
                 if controller_was_connected:
                     robot.stop()
@@ -158,7 +168,7 @@ def _ensure_directories(config: dict) -> None:
         resolve_path(config, key).mkdir(parents=True, exist_ok=True)
 
 
-def _start_web_server(config: dict, status: StatusTracker, logger: logging.Logger, env_path) -> None:
+def _start_web_server(config: dict, status: StatusTracker, logger: logging.Logger, env_path, debug_store: DebugStateStore) -> None:
     web_config = config.get("web", {})
     setup_ap_config = config.get("setup_ap", {})
     try:
@@ -169,6 +179,8 @@ def _start_web_server(config: dict, status: StatusTracker, logger: logging.Logge
             port=int(web_config.get("port", 8080)),
             env_path=env_path,
             openai_model=str(config.get("openai", {}).get("chat_model", "gpt-5-mini")),
+            repo_dir=project_root(),
+            debug_store=debug_store,
             access_point_config=AccessPointConfig(
                 ssid=str(setup_ap_config.get("ssid", "KidBot-Setup")),
                 password=str(setup_ap_config.get("password", "kidbot1234")),
@@ -214,6 +226,7 @@ def _drive_from_controller(
     steering_smoother: Smoother,
     speed_limiter: RateLimiter,
     dt: float,
+    debug_store: DebugStateStore,
 ) -> None:
     controller_config = config.get("controller", {})
     axes = controller_config.get("axes", {})
@@ -231,10 +244,11 @@ def _drive_from_controller(
 
     smooth_speed = speed_limiter.update(target_speed, dt)
     smooth_steering = steering_smoother.update(command.steering_angle)
+    debug_store.record_drive(smooth_speed, smooth_steering)
     robot.drive(smooth_speed, smooth_steering)
 
 
-def _move_head_from_dpad(config: dict, state, robot: RobotHardware) -> None:
+def _move_head_from_dpad(config: dict, state, robot: RobotHardware, debug_store: DebugStateStore) -> None:
     controller_config = config.get("controller", {})
     dpad_config = controller_config.get("dpad", {})
     hat_index = int(dpad_config.get("hat_index", 0))
@@ -242,15 +256,20 @@ def _move_head_from_dpad(config: dict, state, robot: RobotHardware) -> None:
     if x == 0 and y == 0:
         return
     step = float(config.get("head", {}).get("step", 5))
-    robot.move_head(pan_delta=x * step, tilt_delta=y * step)
+    pan_delta = x * step
+    tilt_delta = y * step
+    debug_store.record_head(pan_delta, tilt_delta)
+    robot.move_head(pan_delta=pan_delta, tilt_delta=tilt_delta)
 
 
-def _handle_button_events(config: dict, state, tracker: ButtonTracker, actions: ButtonActions) -> None:
+def _named_buttons(config: dict, state) -> dict[str, bool]:
     controller_config = config.get("controller", {})
     button_mapping = controller_config.get("buttons", {})
-    named_buttons = map_named_buttons(state, {name: int(index) for name, index in button_mapping.items()})
+    return map_named_buttons(state, {name: int(index) for name, index in button_mapping.items()})
 
-    for name, event in tracker.update(named_buttons):
+
+def _handle_button_events(button_events: list[tuple[str, str]], actions: ButtonActions) -> None:
+    for name, event in button_events:
         if event not in {"press", "double", "long", "release"}:
             continue
         if name == "start" and event == "press":

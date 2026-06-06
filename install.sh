@@ -49,7 +49,7 @@ sudo sed -i "s|__KIDBOT_USER__|$SERVICE_USER|g" /etc/systemd/system/kidbot.servi
 
 sudo systemctl daemon-reload
 sudo systemctl enable kidbot.service
-sudo systemctl enable --now kidbot-updater.timer
+sudo systemctl disable --now kidbot-updater.timer || true
 
 NMCLI_PATH="$(command -v nmcli || true)"
 if [[ -n "$NMCLI_PATH" ]]; then

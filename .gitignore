@@ -1,4 +1,5 @@
 .env
+.kidbot/
 .venv/
 __pycache__/
 *.pyc
@@ -7,4 +8,3 @@ logs/*.log.*
 photos/*.jpg
 photos/*.jpeg
 photos/*.png
-

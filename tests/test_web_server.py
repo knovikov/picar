@@ -111,6 +111,69 @@ class WebServerTests(unittest.TestCase):
         self.assertIn("<h1>Picar</h1>", html)
         self.assertNotIn("<h1>KidBot</h1>", html)
 
+    def test_index_contains_manual_update_panel_and_debug_link(self):
+        from kidbot.core.web_server import _render_index
+        from kidbot.core.wifi_setup import AccessPointConfig
+
+        status = {
+            "robot_name": "KidBot",
+            "version": "0.1.0",
+            "wifi_connected": True,
+            "internet_connected": True,
+            "ip_address": "127.0.0.1",
+            "controller_connected": False,
+            "latest_error": None,
+            "uptime_seconds": 1,
+        }
+
+        html = _render_index(status, [], {"masked": "not set"}, AccessPointConfig())
+
+        self.assertIn("Обновления", html)
+        self.assertIn("/api/update/check", html)
+        self.assertIn("/api/update/apply", html)
+        self.assertIn("/api/update/rollback", html)
+        self.assertIn('href="/debug"', html)
+
+    def test_debug_page_contains_websocket_and_live_widgets(self):
+        from kidbot.core.web_server import _render_debug_page
+
+        html = _render_debug_page()
+
+        self.assertIn("/ws/debug", html)
+        self.assertIn("controllerGrid", html)
+        self.assertIn("logConsole", html)
+        self.assertIn("waveCanvas", html)
+
+    def test_debug_websocket_sends_snapshot(self):
+        from fastapi.testclient import TestClient
+
+        from kidbot.core.status import SystemStatus
+        from kidbot.core.web_server import create_app
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            photo_dir = Path(tmpdir)
+
+            def status_provider():
+                return SystemStatus(
+                    robot_name="KidBot",
+                    version="0.1.0",
+                    wifi_connected=True,
+                    internet_connected=True,
+                    ip_address="127.0.0.1",
+                    controller_connected=False,
+                    latest_error=None,
+                    uptime_seconds=1,
+                )
+
+            app = create_app(photo_dir, status_provider, repo_dir=Path(tmpdir))
+            client = TestClient(app)
+
+            with client.websocket_connect("/ws/debug") as websocket:
+                payload = websocket.receive_json()
+
+        self.assertIn("controller", payload)
+        self.assertIn("status", payload)
+
 
 if __name__ == "__main__":
     unittest.main()

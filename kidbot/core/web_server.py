@@ -6,14 +6,17 @@ import html
 import logging
 import os
 import threading
+import asyncio
 from pathlib import Path
 from typing import Callable, Optional
 
 from kidbot.core.bluetooth_setup import connect_bluetooth_device, disconnect_bluetooth_device, scan_bluetooth_devices
 from kidbot.core.config import DEFAULT_CONFIG
+from kidbot.core.debug_state import DebugStateStore
 from kidbot.core.openai_health import check_openai_api_key
 from kidbot.core.secrets import openai_key_status, save_openai_api_key
 from kidbot.core.status import SystemStatus
+from kidbot.core.updater import UpdateManager
 from kidbot.core.wifi_setup import AccessPointConfig, connect_to_wifi, scan_wifi_networks, start_access_point
 
 PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png"}
@@ -56,17 +59,25 @@ def create_app(
     env_path: Optional[Path] = None,
     access_point_config: Optional[AccessPointConfig] = None,
     openai_model: Optional[str] = None,
+    repo_dir: Optional[Path] = None,
+    update_manager: Optional[UpdateManager] = None,
+    debug_store: Optional[DebugStateStore] = None,
 ):
     try:
-        from fastapi import FastAPI, HTTPException, Request
+        from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
         from fastapi.responses import FileResponse, HTMLResponse
     except ImportError as exc:
         raise RuntimeError("FastAPI is required for the web server. Run pip install -r requirements.txt") from exc
+    globals()["WebSocket"] = WebSocket
+    globals()["WebSocketDisconnect"] = WebSocketDisconnect
 
     app = FastAPI(title="KidBot")
     env_path = env_path or Path(".env")
     access_point_config = access_point_config or AccessPointConfig()
     openai_model = openai_model or DEFAULT_CONFIG["openai"]["chat_model"]
+    repo_dir = Path(repo_dir or Path.cwd())
+    update_manager = update_manager or UpdateManager(repo_dir)
+    debug_store = debug_store or DebugStateStore()
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -79,6 +90,10 @@ def create_app(
         status = build_status_payload(status_provider())
         photos = list_photo_files(photo_dir)
         return _render_index(status, photos, openai_key_status(env_path), access_point_config)
+
+    @app.get("/debug", response_class=HTMLResponse)
+    def debug_page():
+        return _render_debug_page()
 
     @app.get("/photos/{filename}")
     def get_photo(filename: str):
@@ -161,6 +176,33 @@ def create_app(
         result = check_openai_api_key(api_key, model=str(openai_model))
         return {**result.__dict__, "masked": key["masked"]}
 
+    @app.get("/api/update/status")
+    def api_update_status():
+        return update_manager.status_payload()
+
+    @app.post("/api/update/check")
+    def api_update_check():
+        return update_manager.check()
+
+    @app.post("/api/update/apply")
+    def api_update_apply():
+        return update_manager.start_update()
+
+    @app.post("/api/update/rollback")
+    def api_update_rollback():
+        return update_manager.start_rollback()
+
+    @app.websocket("/ws/debug")
+    async def websocket_debug(websocket: WebSocket):
+        await websocket.accept()
+        try:
+            while True:
+                status = build_status_payload(status_provider())
+                await websocket.send_json(debug_store.snapshot(status=status))
+                await asyncio.sleep(0.05)
+        except WebSocketDisconnect:
+            return
+
     return app
 
 
@@ -172,6 +214,9 @@ def run_web_server(
     env_path: Optional[Path] = None,
     access_point_config: Optional[AccessPointConfig] = None,
     openai_model: Optional[str] = None,
+    repo_dir: Optional[Path] = None,
+    update_manager: Optional[UpdateManager] = None,
+    debug_store: Optional[DebugStateStore] = None,
 ) -> threading.Thread:
     import uvicorn
 
@@ -181,6 +226,9 @@ def run_web_server(
         env_path=env_path,
         access_point_config=access_point_config,
         openai_model=openai_model,
+        repo_dir=repo_dir,
+        update_manager=update_manager,
+        debug_store=debug_store,
     )
     config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
@@ -346,6 +394,19 @@ def _render_index(
       font-size: 13px;
     }}
     .limit-box strong {{ color: var(--ink); }}
+    .top-actions {{ display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }}
+    .debug-link {{
+      min-height: 34px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.75);
+      color: var(--ink);
+      font-weight: 800;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }}
     @media (max-width: 820px) {{
       .shell {{ padding: 14px; }}
       header {{ grid-template-columns: 1fr; align-items: start; }}
@@ -362,7 +423,10 @@ def _render_index(
         <h1>Picar</h1>
         <p class="hero-note">Фото, Wi-Fi, пульт и облачный мозг робота в одном месте. Большие кнопки, короткие слова, никакой паники.</p>
       </div>
-      <div class="badge"><span class="dot {'good' if status["internet_connected"] else ''}"></span>{'Интернет есть' if status["internet_connected"] else 'Setup режим'}</div>
+      <div class="top-actions">
+        <a class="debug-link" href="/debug">Debug</a>
+        <div class="badge"><span class="dot {'good' if status["internet_connected"] else ''}"></span>{'Интернет есть' if status["internet_connected"] else 'Setup режим'}</div>
+      </div>
     </header>
 
     <div class="grid">
@@ -380,6 +444,24 @@ def _render_index(
             <div class="stat"><strong>Пульт</strong>{'подключен' if status["controller_connected"] else 'не найден'}</div>
             <div class="stat"><strong>OpenAI</strong>{html.escape(key_status["masked"])}</div>
           </div>
+        </section>
+
+        <section>
+          <h2>Обновления</h2>
+          <p class="small">Робот не скачивает код сам при включении. Сначала проверь обновление, потом нажми большую кнопку.</p>
+          <div class="status-grid" style="margin-top: 10px">
+            <div class="stat"><strong>Текущий</strong><span id="updateCurrent">?</span></div>
+            <div class="stat"><strong>GitHub</strong><span id="updateRemote">?</span></div>
+            <div class="stat"><strong>Стабильный</strong><span id="updateStable">не сохранен</span></div>
+            <div class="stat"><strong>Задача</strong><span id="updateJob">idle</span></div>
+          </div>
+          <div class="row" style="margin-top: 12px">
+            <button class="secondary" id="checkUpdateButton" type="button">Проверить</button>
+            <button class="sun" id="applyUpdateButton" type="button">Обновить</button>
+            <button class="danger" id="rollbackButton" type="button">Откатиться</button>
+          </div>
+          <p class="message" id="updateMessage">Готово. Обновления запускаются только отсюда.</p>
+          <p class="small">Аварийный откат на пульте: зажать Select и Start примерно на 2 секунды.</p>
         </section>
       </div>
 
@@ -511,6 +593,58 @@ def _render_index(
       }}
     }});
 
+    async function refreshUpdateStatus() {{
+      try {{
+        const payload = await jsonFetch('/api/update/status');
+        renderUpdateStatus(payload);
+      }} catch (error) {{
+        document.getElementById('updateMessage').textContent = error.message;
+      }}
+    }}
+
+    function renderUpdateStatus(payload) {{
+      const status = payload.status || {{}};
+      const stable = payload.stable_build || {{}};
+      const result = payload.last_result || {{}};
+      document.getElementById('updateCurrent').textContent = shortCommit(status.current);
+      document.getElementById('updateRemote').textContent = shortCommit(status.upstream);
+      document.getElementById('updateStable').textContent = shortCommit(stable.commit || status.stable) || 'не сохранен';
+      document.getElementById('updateJob').textContent = payload.running ? payload.action : 'idle';
+      document.getElementById('updateMessage').textContent = payload.running ? 'Работаю: ' + payload.action : (result.message || status.message || 'Готово.');
+    }}
+
+    async function runUpdateAction(url, text) {{
+      if (!confirm(text)) return;
+      document.getElementById('updateMessage').textContent = 'Запускаю...';
+      try {{
+        const payload = await jsonFetch(url, {{ method: 'POST', body: '{{}}' }});
+        renderUpdateStatus(payload);
+      }} catch (error) {{
+        document.getElementById('updateMessage').textContent = error.message;
+      }}
+    }}
+
+    document.getElementById('checkUpdateButton').addEventListener('click', async () => {{
+      document.getElementById('updateMessage').textContent = 'Проверяю GitHub...';
+      try {{
+        const payload = await jsonFetch('/api/update/check', {{ method: 'POST', body: '{{}}' }});
+        renderUpdateStatus(payload);
+      }} catch (error) {{
+        document.getElementById('updateMessage').textContent = error.message;
+      }}
+    }});
+
+    document.getElementById('applyUpdateButton').addEventListener('click', () => {{
+      runUpdateAction('/api/update/apply', 'Скачать и применить новую версию? Текущий build станет стабильным rollback build.');
+    }});
+
+    document.getElementById('rollbackButton').addEventListener('click', () => {{
+      runUpdateAction('/api/update/rollback', 'Откатиться на сохраненную стабильную версию? Робот перезапустится.');
+    }});
+
+    window.setInterval(refreshUpdateStatus, 2500);
+    refreshUpdateStatus();
+
     document.getElementById('bluetoothScanButton').addEventListener('click', async () => {{
       const message = document.getElementById('bluetoothMessage');
       const select = document.getElementById('bluetoothDevice');
@@ -613,6 +747,250 @@ def _render_index(
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     }}
+
+    function shortCommit(value) {{
+      value = String(value || '');
+      return value ? value.slice(0, 7) : '';
+    }}
+  </script>
+</body>
+</html>
+"""
+
+
+def _render_debug_page() -> str:
+    return """
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Picar Debug</title>
+  <style>
+    :root {
+      --ink: #161b22;
+      --muted: #687389;
+      --line: #d7dde7;
+      --paper: #f7fafc;
+      --panel: #ffffff;
+      --sky: #2f80ed;
+      --mint: #1f9d76;
+      --sun: #f4b740;
+      --coral: #ef6f5e;
+      --violet: #7c5cff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: linear-gradient(180deg, #f9fbff 0%, #eef7f3 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .shell { max-width: 1180px; margin: 0 auto; padding: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 16px; border-bottom: 2px solid rgba(22,27,34,.08); }
+    h1 { margin: 0; font-size: 32px; letter-spacing: 0; }
+    h2 { margin: 0 0 10px; font-size: 20px; letter-spacing: 0; }
+    a { color: var(--sky); font-weight: 800; text-decoration: none; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+    section { border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.88); padding: 14px; box-shadow: 0 10px 22px rgba(26,35,50,.08); }
+    .wide { grid-column: 1 / -1; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--line); font-weight: 800; }
+    .dot { width: 10px; height: 10px; border-radius: 99px; background: var(--coral); }
+    .dot.live { background: var(--mint); }
+    .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .stat { background: #f7fbff; border-left: 4px solid var(--sky); border-radius: 6px; padding: 10px; min-height: 58px; }
+    .stat strong { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .controller-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .button-cell { min-height: 42px; border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; font-weight: 900; background: #fff; }
+    .button-cell.on { background: var(--sun); color: #241b00; border-color: #d79a20; }
+    canvas { width: 100%; display: block; border: 1px solid var(--line); border-radius: 8px; background: #101828; }
+    #stickCanvas { height: 230px; }
+    #waveCanvas { height: 150px; }
+    #logConsole { min-height: 260px; max-height: 360px; overflow: auto; margin: 0; padding: 12px; border-radius: 8px; background: #101828; color: #d7e6ff; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button { appearance: none; border: 0; border-radius: 8px; min-height: 38px; padding: 8px 12px; font-weight: 900; color: white; background: var(--ink); cursor: pointer; }
+    button.secondary { background: var(--violet); }
+    @media (max-width: 820px) {
+      .grid, .stats { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+      .controller-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>Picar Debug</h1>
+        <a href="/">← назад к setup</a>
+      </div>
+      <div class="badge"><span class="dot" id="wsDot"></span><span id="wsState">connecting</span></div>
+    </header>
+
+    <div class="grid">
+      <section class="wide">
+        <h2>Состояние</h2>
+        <div class="stats">
+          <div class="stat"><strong>Пульт</strong><span id="controllerName">?</span></div>
+          <div class="stat"><strong>Скорость</strong><span id="driveSpeed">0</span></div>
+          <div class="stat"><strong>Руль</strong><span id="driveSteering">0</span></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Кнопки</h2>
+        <div class="controller-grid" id="controllerGrid"></div>
+      </section>
+
+      <section>
+        <h2>Стики</h2>
+        <canvas id="stickCanvas" width="720" height="260"></canvas>
+      </section>
+
+      <section>
+        <div class="row" style="justify-content: space-between; margin-bottom: 10px">
+          <h2 style="margin: 0">Звуковая волна</h2>
+          <button class="secondary" id="micButton" type="button">Микрофон браузера</button>
+        </div>
+        <canvas id="waveCanvas" width="720" height="180"></canvas>
+      </section>
+
+      <section>
+        <h2>События</h2>
+        <pre id="eventConsole"></pre>
+      </section>
+
+      <section class="wide">
+        <h2>Консоль</h2>
+        <pre id="logConsole"></pre>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const buttons = ['a','b','x','y','l1','r1','l2','r2','select','start'];
+    const controllerGrid = document.getElementById('controllerGrid');
+    buttons.forEach((name) => {
+      const div = document.createElement('div');
+      div.className = 'button-cell';
+      div.id = 'button-' + name;
+      div.textContent = name.toUpperCase();
+      controllerGrid.appendChild(div);
+    });
+
+    let lastPayload = null;
+    let waveMode = 'idle';
+    let analyser = null;
+    let audioData = null;
+
+    function connectDebugSocket() {
+      const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+      const socket = new WebSocket(protocol + '://' + location.host + '/ws/debug');
+      socket.onopen = () => setWsState(true, 'live');
+      socket.onclose = () => {
+        setWsState(false, 'reconnect');
+        window.setTimeout(connectDebugSocket, 700);
+      };
+      socket.onerror = () => setWsState(false, 'error');
+      socket.onmessage = (event) => {
+        lastPayload = JSON.parse(event.data);
+        renderPayload(lastPayload);
+      };
+    }
+
+    function setWsState(live, text) {
+      document.getElementById('wsDot').classList.toggle('live', live);
+      document.getElementById('wsState').textContent = text;
+    }
+
+    function renderPayload(payload) {
+      const controller = payload.controller || {};
+      const drive = payload.drive || {};
+      document.getElementById('controllerName').textContent = controller.connected ? controller.name : 'не подключен';
+      document.getElementById('driveSpeed').textContent = drive.speed ?? 0;
+      document.getElementById('driveSteering').textContent = drive.steering_angle ?? 0;
+
+      const named = controller.named_buttons || {};
+      buttons.forEach((name) => {
+        document.getElementById('button-' + name).classList.toggle('on', Boolean(named[name]));
+      });
+
+      document.getElementById('eventConsole').textContent = (payload.events || [])
+        .slice(-14)
+        .map((item) => item.button + ' · ' + item.event)
+        .join('\\n');
+      document.getElementById('logConsole').textContent = (payload.logs || [])
+        .slice(-80)
+        .map((item) => '[' + item.level + '] ' + item.logger + ': ' + item.message)
+        .join('\\n');
+      drawSticks(controller.axes || {});
+    }
+
+    function drawSticks(axes) {
+      const canvas = document.getElementById('stickCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawStick(ctx, 180, 130, Number(axes['0'] || 0), Number(axes['1'] || 0), 'left');
+      drawStick(ctx, 540, 130, Number(axes['2'] || 0), Number(axes['3'] || 0), 'right');
+    }
+
+    function drawStick(ctx, cx, cy, x, y, label) {
+      ctx.strokeStyle = '#7c8aa5';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 82, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#2f80ed';
+      ctx.beginPath();
+      ctx.arc(cx + x * 70, cy + y * 70, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#d7e6ff';
+      ctx.font = '18px system-ui';
+      ctx.fillText(label, cx - 22, cy + 110);
+    }
+
+    document.getElementById('micButton').addEventListener('click', async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const context = new AudioContext();
+        const source = context.createMediaStreamSource(stream);
+        analyser = context.createAnalyser();
+        analyser.fftSize = 1024;
+        source.connect(analyser);
+        audioData = new Uint8Array(analyser.fftSize);
+        waveMode = 'browser';
+      } catch (error) {
+        waveMode = 'idle';
+      }
+    });
+
+    function drawWave() {
+      const canvas = document.getElementById('waveCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = waveMode === 'browser' ? '#1f9d76' : '#f4b740';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (analyser && audioData) {
+        analyser.getByteTimeDomainData(audioData);
+        audioData.forEach((value, index) => {
+          const x = index / audioData.length * canvas.width;
+          const y = value / 255 * canvas.height;
+          index === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+      } else {
+        const now = Date.now() / 260;
+        for (let x = 0; x < canvas.width; x += 8) {
+          const y = canvas.height / 2 + Math.sin(x / 24 + now) * 18;
+          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+      requestAnimationFrame(drawWave);
+    }
+
+    connectDebugSocket();
+    drawWave();
   </script>
 </body>
 </html>

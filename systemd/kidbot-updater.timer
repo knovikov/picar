@@ -1,5 +1,5 @@
 [Unit]
-Description=Run KidBot updater at boot and every day
+Description=Manual-only KidBot updater timer (disabled by install.sh)
 
 [Timer]
 OnBootSec=2min
@@ -8,4 +8,3 @@ Persistent=true
 
 [Install]
 WantedBy=timers.target
-

@@ -97,6 +97,8 @@ class ButtonTracker:
         self.last_press_at: dict[str, float] = {}
         self.pressed_at: dict[str, float] = {}
         self.long_sent: set[str] = set()
+        self.combo_pressed_at: dict[str, float] = {}
+        self.combo_long_sent: set[str] = set()
 
     def update(self, pressed_buttons: dict[str, bool], now: float | None = None) -> list[tuple[str, str]]:
         now = now or time.monotonic()
@@ -127,6 +129,29 @@ class ButtonTracker:
             self.previous[name] = is_pressed
 
         return events
+
+    def combo_long_pressed(
+        self,
+        combo_name: str,
+        pressed_buttons: dict[str, bool],
+        button_names: tuple[str, ...],
+        now: float | None = None,
+        hold_seconds: float = 2.0,
+    ) -> bool:
+        now = now or time.monotonic()
+        is_pressed = all(bool(pressed_buttons.get(name, False)) for name in button_names)
+        if not is_pressed:
+            self.combo_pressed_at.pop(combo_name, None)
+            self.combo_long_sent.discard(combo_name)
+            return False
+
+        pressed_at = self.combo_pressed_at.setdefault(combo_name, now)
+        if combo_name in self.combo_long_sent:
+            return False
+        if now - pressed_at >= hold_seconds:
+            self.combo_long_sent.add(combo_name)
+            return True
+        return False
 
 
 def map_named_buttons(state: JoystickState, mapping: dict[str, int]) -> dict[str, bool]:
