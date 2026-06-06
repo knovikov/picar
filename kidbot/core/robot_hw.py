@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from kidbot.core.smoothing import clamp
@@ -82,5 +83,39 @@ class RobotHardware:
     def move_head(self, pan_delta: float, tilt_delta: float) -> None:
         self.set_head(self.pan + pan_delta, self.tilt + tilt_delta)
 
+    def read_front_distance_cm(self) -> float | None:
+        if self.mock or self._picar is None:
+            return None
+
+        try:
+            raw_distance = self._read_front_distance_raw()
+            if raw_distance is None:
+                return None
+            distance = float(raw_distance)
+        except Exception as exc:
+            logger.debug("front distance sensor unavailable: %s", exc)
+            return None
+
+        if distance < 0:
+            return None
+        return _round_distance_cm(distance)
+
+    def _read_front_distance_raw(self) -> Any:
+        assert self._picar is not None
+        for method_name in ("get_distance", "get_ultrasonic_distance"):
+            method = getattr(self._picar, method_name, None)
+            if callable(method):
+                return method()
+
+        ultrasonic = getattr(self._picar, "ultrasonic", None)
+        read = getattr(ultrasonic, "read", None)
+        if callable(read):
+            return read()
+        return None
+
     def cleanup(self) -> None:
         self.stop()
+
+
+def _round_distance_cm(distance: float) -> float:
+    return float(Decimal(str(distance)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))

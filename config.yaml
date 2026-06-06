@@ -55,6 +55,9 @@ head:
   tilt_max: 30
   step: 5
 
+front_sensor:
+  poll_hz: 5
+
 web:
   host: "0.0.0.0"
   port: 8080

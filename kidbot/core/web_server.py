@@ -797,9 +797,12 @@ def _render_debug_page() -> str:
     .badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--line); font-weight: 800; }
     .dot { width: 10px; height: 10px; border-radius: 99px; background: var(--coral); }
     .dot.live { background: var(--mint); }
-    .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
     .stat { background: #f7fbff; border-left: 4px solid var(--sky); border-radius: 6px; padding: 10px; min-height: 58px; }
     .stat strong { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .stat small { display: block; color: var(--muted); font-weight: 800; margin-top: 4px; }
+    .stat.sensor-ok { border-left-color: var(--mint); background: #f5fffb; }
+    .stat.sensor-near { border-left-color: var(--coral); background: #fff7f5; }
     .controller-shell {
       position: relative;
       width: 100%;
@@ -989,6 +992,7 @@ def _render_debug_page() -> str:
           <div class="stat"><strong>Пульт</strong><span id="controllerName">?</span></div>
           <div class="stat"><strong>Скорость</strong><span id="driveSpeed">0</span></div>
           <div class="stat"><strong>Руль</strong><span id="driveSteering">0</span></div>
+          <div class="stat" id="frontSensorCard"><strong>Передний датчик</strong><span id="frontSensorDistance">нет данных</span><small id="frontSensorStatus">waiting</small></div>
         </div>
       </section>
 
@@ -1111,6 +1115,7 @@ def _render_debug_page() -> str:
       document.getElementById('driveSteering').textContent = drive.steering_angle ?? 0;
 
       renderControllerLayout(controller);
+      renderFrontSensor(payload.front_sensor || {});
 
       document.getElementById('eventConsole').textContent = (payload.events || [])
         .slice(-14)
@@ -1146,6 +1151,21 @@ def _render_debug_page() -> str:
       document.getElementById('btn-dpad-right').classList.toggle('on', x > 0);
       document.getElementById('btn-dpad-down').classList.toggle('on', y < 0);
       document.getElementById('btn-dpad-left').classList.toggle('on', x < 0);
+    }
+
+    function renderFrontSensor(frontSensor) {
+      const card = document.getElementById('frontSensorCard');
+      const distance = frontSensor.distance_cm;
+      const hasDistance = distance !== null && distance !== undefined;
+      const numericDistance = Number(distance);
+      const isNear = hasDistance && numericDistance > 0 && numericDistance < 15;
+
+      card.classList.toggle('sensor-ok', hasDistance && !isNear);
+      card.classList.toggle('sensor-near', isNear);
+      document.getElementById('frontSensorDistance').textContent = hasDistance
+        ? numericDistance.toFixed(1) + ' cm'
+        : 'нет данных';
+      document.getElementById('frontSensorStatus').textContent = isNear ? 'близко' : (frontSensor.status || 'waiting');
     }
 
     function drawSticks(axes) {

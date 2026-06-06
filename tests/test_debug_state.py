@@ -29,6 +29,18 @@ class DebugStateTests(unittest.TestCase):
         self.assertEqual(snapshot["events"][-1]["button"], "a")
         self.assertIn("hello from test", snapshot["logs"][-1]["message"])
 
+    def test_debug_state_records_front_sensor_distance(self):
+        from kidbot.core.debug_state import DebugStateStore
+
+        store = DebugStateStore()
+
+        store.record_front_sensor(distance_cm=23.456, status="ok")
+        snapshot = store.snapshot()
+
+        self.assertEqual(snapshot["front_sensor"]["distance_cm"], 23.46)
+        self.assertEqual(snapshot["front_sensor"]["status"], "ok")
+        self.assertIn("timestamp", snapshot["front_sensor"])
+
     def test_debug_log_handler_appends_formatted_records(self):
         from kidbot.core.debug_state import DebugLogHandler, DebugStateStore
 

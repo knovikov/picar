@@ -99,8 +99,11 @@ def main() -> None:
 
     poll_hz = max(1, int(controller_config.get("poll_hz", 30)))
     sleep_seconds = 1.0 / poll_hz
+    front_sensor_config = config.get("front_sensor", {})
+    front_sensor_interval = 1.0 / max(1, int(front_sensor_config.get("poll_hz", 5)))
     last_time = time.monotonic()
     last_network_check = 0.0
+    last_front_sensor_check = 0.0
     controller_was_connected = False
 
     try:
@@ -136,6 +139,10 @@ def main() -> None:
             if watchdog.expired():
                 robot.stop()
                 watchdog.stopped_due_to_timeout = True
+
+            if now - last_front_sensor_check >= front_sensor_interval:
+                _record_front_sensor(robot, debug_store)
+                last_front_sensor_check = now
 
             if now - last_network_check > 5.0:
                 _refresh_network_status(status, network_monitor)
@@ -196,6 +203,11 @@ def _start_web_server(config: dict, status: StatusTracker, logger: logging.Logge
 def _refresh_network_status(status: StatusTracker, network_monitor: NetworkMonitor) -> None:
     snapshot = network_monitor.check()
     status.set_network(snapshot.wifi_connected, snapshot.internet_connected, snapshot.ip_address)
+
+
+def _record_front_sensor(robot: RobotHardware, debug_store: DebugStateStore) -> None:
+    distance_cm = robot.read_front_distance_cm()
+    debug_store.record_front_sensor(distance_cm, status="ok" if distance_cm is not None else "no-data")
 
 
 def _maybe_start_setup_access_point(config: dict, status: StatusTracker, logger: logging.Logger, voice: Voice, mock: bool) -> None:

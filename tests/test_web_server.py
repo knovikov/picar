@@ -141,6 +141,8 @@ class WebServerTests(unittest.TestCase):
 
         self.assertIn("/ws/debug", html)
         self.assertIn("controllerGrid", html)
+        self.assertIn("frontSensorDistance", html)
+        self.assertIn("renderFrontSensor", html)
         self.assertIn("logConsole", html)
         self.assertIn("waveCanvas", html)
 

@@ -19,6 +19,7 @@ class DebugStateStore:
         self._controller: dict[str, Any] = _empty_controller()
         self._drive: dict[str, Any] = {"speed": 0.0, "steering_angle": 0.0}
         self._head: dict[str, Any] = {"pan_delta": 0.0, "tilt_delta": 0.0}
+        self._front_sensor: dict[str, Any] = _empty_front_sensor()
 
     def record_controller(
         self,
@@ -47,6 +48,14 @@ class DebugStateStore:
         with self._lock:
             self._head = {"pan_delta": round(pan_delta, 3), "tilt_delta": round(tilt_delta, 3)}
 
+    def record_front_sensor(self, distance_cm: float | None, status: str = "ok") -> None:
+        with self._lock:
+            self._front_sensor = {
+                "distance_cm": None if distance_cm is None else round(float(distance_cm), 2),
+                "status": status,
+                "timestamp": round(time.time(), 3),
+            }
+
     def append_log(self, level: str, logger_name: str, message: str) -> None:
         with self._lock:
             self._logs.append(
@@ -66,6 +75,7 @@ class DebugStateStore:
                 "controller": dict(self._controller),
                 "drive": dict(self._drive),
                 "head": dict(self._head),
+                "front_sensor": dict(self._front_sensor),
                 "events": list(self._events),
                 "logs": list(self._logs),
             }
@@ -101,5 +111,13 @@ def _empty_controller() -> dict[str, Any]:
         "buttons": {},
         "named_buttons": {},
         "hats": {},
+        "timestamp": round(time.time(), 3),
+    }
+
+
+def _empty_front_sensor() -> dict[str, Any]:
+    return {
+        "distance_cm": None,
+        "status": "waiting",
         "timestamp": round(time.time(), 3),
     }
