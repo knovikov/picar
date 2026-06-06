@@ -99,13 +99,15 @@ python3 tools/generate_sample_audio.py
 sudo chown -R "$SERVICE_USER:$SERVICE_USER" .venv photos logs assets .env
 
 sudo cp systemd/kidbot.service /etc/systemd/system/kidbot.service
+sudo cp systemd/kidbot-network-recovery.service /etc/systemd/system/kidbot-network-recovery.service
 sudo cp systemd/kidbot-updater.service /etc/systemd/system/kidbot-updater.service
 sudo cp systemd/kidbot-updater.timer /etc/systemd/system/kidbot-updater.timer
 
-sudo sed -i "s|__KIDBOT_DIR__|$REPO_DIR|g" /etc/systemd/system/kidbot.service /etc/systemd/system/kidbot-updater.service
-sudo sed -i "s|__KIDBOT_USER__|$SERVICE_USER|g" /etc/systemd/system/kidbot.service /etc/systemd/system/kidbot-updater.service
+sudo sed -i "s|__KIDBOT_DIR__|$REPO_DIR|g" /etc/systemd/system/kidbot.service /etc/systemd/system/kidbot-network-recovery.service /etc/systemd/system/kidbot-updater.service
+sudo sed -i "s|__KIDBOT_USER__|$SERVICE_USER|g" /etc/systemd/system/kidbot.service /etc/systemd/system/kidbot-network-recovery.service /etc/systemd/system/kidbot-updater.service
 
 sudo systemctl daemon-reload
+sudo systemctl enable kidbot-network-recovery.service
 sudo systemctl enable kidbot.service
 sudo systemctl disable --now kidbot-updater.timer || true
 

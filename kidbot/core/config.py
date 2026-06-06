@@ -60,6 +60,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "tts_model": "gpt-4o-mini-tts",
     },
     "voice": {"espeak_voice": "ru", "espeak_speed": 150, "use_openai_tts": True},
+    "setup_ap": {
+        "enabled": True,
+        "auto_start_when_no_wifi": True,
+        "boot_check_wait_seconds": 45,
+        "boot_check_poll_seconds": 3,
+        "ssid": "KidBot-Setup",
+        "password": "kidbot1234",
+        "interface": "wlan0",
+        "address": "192.168.4.1/24",
+    },
 }
 
 

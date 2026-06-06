@@ -1,0 +1,15 @@
+[Unit]
+Description=KidBot Wi-Fi setup access point fallback
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+User=__KIDBOT_USER__
+WorkingDirectory=__KIDBOT_DIR__
+Environment=PYTHONUNBUFFERED=1
+Environment=KIDBOT_CONFIG=__KIDBOT_DIR__/config.yaml
+ExecStart=__KIDBOT_DIR__/.venv/bin/python -m kidbot.network_recovery --config __KIDBOT_DIR__/config.yaml
+
+[Install]
+WantedBy=multi-user.target

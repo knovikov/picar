@@ -173,11 +173,18 @@ http://192.168.4.1:8080
 setup_ap:
   enabled: true
   auto_start_when_no_wifi: true
+  boot_check_wait_seconds: 45
+  boot_check_poll_seconds: 3
   ssid: "KidBot-Setup"
   password: "kidbot1234"
   interface: "wlan0"
   address: "192.168.4.1/24"
 ```
+
+При установке включается `kidbot-network-recovery.service`: после загрузки он
+ждет `boot_check_wait_seconds`, и если робот не подключился к сохраненной Wi-Fi
+сети, включает `KidBot-Setup`. Тогда подключись к этой сети и открой
+`http://192.168.4.1:8080`.
 
 Важно: `kidbot1234` — публичный demo-пароль. Перед настоящим использованием
 лучше поменять его в `config.yaml`.
@@ -303,6 +310,7 @@ Systemd-логи:
 
 ```bash
 journalctl -u kidbot.service -f
+journalctl -u kidbot-network-recovery.service -n 50 --no-pager
 ```
 
 Локальные логи:

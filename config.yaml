@@ -81,6 +81,8 @@ web:
 setup_ap:
   enabled: true
   auto_start_when_no_wifi: true
+  boot_check_wait_seconds: 45
+  boot_check_poll_seconds: 3
   ssid: "KidBot-Setup"
   password: "kidbot1234"
   interface: "wlan0"
