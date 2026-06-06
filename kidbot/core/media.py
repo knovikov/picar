@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import random
 import subprocess
+import sys
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -119,5 +120,7 @@ def play_audio_file(path: Path, wait: bool = False) -> Optional[subprocess.Popen
 
 def _player_command(path: Path) -> list[str]:
     if path.suffix.lower() == ".wav":
+        if sys.platform == "darwin":
+            return ["afplay", str(path)]
         return ["aplay", str(path)]
     return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(path)]
