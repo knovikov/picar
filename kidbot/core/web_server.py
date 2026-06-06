@@ -359,7 +359,7 @@ def _render_index(
   <main class="shell">
     <header>
       <div>
-        <h1>KidBot</h1>
+        <h1>Picar</h1>
         <p class="hero-note">Фото, Wi-Fi, пульт и облачный мозг робота в одном месте. Большие кнопки, короткие слова, никакой паники.</p>
       </div>
       <div class="badge"><span class="dot {'good' if status["internet_connected"] else ''}"></span>{'Интернет есть' if status["internet_connected"] else 'Setup режим'}</div>

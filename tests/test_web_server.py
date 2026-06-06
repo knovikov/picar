@@ -91,6 +91,26 @@ class WebServerTests(unittest.TestCase):
         self.assertIn("bluetoothDevice", html)
         self.assertIn("/api/bluetooth/scan", html)
 
+    def test_index_header_uses_picar_brand_name(self):
+        from kidbot.core.web_server import _render_index
+        from kidbot.core.wifi_setup import AccessPointConfig
+
+        status = {
+            "robot_name": "KidBot",
+            "version": "0.1.0",
+            "wifi_connected": True,
+            "internet_connected": True,
+            "ip_address": "127.0.0.1",
+            "controller_connected": False,
+            "latest_error": None,
+            "uptime_seconds": 1,
+        }
+
+        html = _render_index(status, [], {"masked": "not set"}, AccessPointConfig())
+
+        self.assertIn("<h1>Picar</h1>", html)
+        self.assertNotIn("<h1>KidBot</h1>", html)
+
 
 if __name__ == "__main__":
     unittest.main()
