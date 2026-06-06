@@ -153,8 +153,13 @@ class WebServerTests(unittest.TestCase):
 
         self.assertIn("controllerFrame", html)
         self.assertIn("controllerShell", html)
+        self.assertIn("systemRow", html)
+        self.assertIn("leftStick", html)
+        self.assertIn("rightStick", html)
         self.assertIn("faceCluster", html)
+        self.assertIn("faceDiamond", html)
         self.assertIn("dpadCluster", html)
+        self.assertNotIn("mode-dots", html)
         for button_id in (
             "btn-a",
             "btn-b",

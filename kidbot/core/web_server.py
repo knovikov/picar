@@ -823,7 +823,7 @@ def _render_debug_page() -> str:
     .controller-shell::after {
       content: "8BitDo Lite 2";
       position: absolute;
-      left: 42%;
+      left: 50%;
       top: 25%;
       color: rgba(255,255,255,.72);
       font-weight: 900;
@@ -864,13 +864,41 @@ def _render_debug_page() -> str:
       font-size: clamp(12px, 1.5vw, 18px);
     }
     .top-button {
-      width: 6.7%;
-      height: 12%;
+      width: 17%;
+      height: 60%;
       border-radius: 999px;
       font-size: clamp(11px, 1.4vw, 16px);
       background: #dc4b4d;
       color: rgba(255,255,255,.78);
       border-color: rgba(120,20,24,.28);
+    }
+    .system-row {
+      position: absolute;
+      left: 34%;
+      top: 13%;
+      width: 32%;
+      height: 14%;
+    }
+    .pair-switch {
+      position: absolute;
+      width: 18%;
+      height: 66%;
+      border-radius: 999px;
+      border: 2px solid rgba(120,20,24,.32);
+      background: #342b30;
+      color: rgba(255,255,255,.9);
+      display: grid;
+      place-items: center;
+      font-size: clamp(9px, 1.2vw, 12px);
+      font-weight: 900;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,.32), 0 2px 0 rgba(255,255,255,.28);
+      user-select: none;
+    }
+    .pair-switch.on {
+      background: var(--sun);
+      color: #241b00;
+      border-color: #d79a20;
+      box-shadow: 0 0 0 4px rgba(244,183,64,.24);
     }
     .centered-button { transform: translateX(-50%); }
     .centered-button.on { transform: translateX(-50%) translateY(2px); }
@@ -901,8 +929,8 @@ def _render_debug_page() -> str:
     .stick span { position: relative; z-index: 1; }
     .dpad-cluster {
       position: absolute;
-      left: 32%;
-      top: 58%;
+      left: 39%;
+      top: 62%;
       width: 16%;
       aspect-ratio: 1;
       transform: translate(-50%, -50%);
@@ -931,22 +959,6 @@ def _render_debug_page() -> str:
       font-weight: 950;
       color: #687079;
       box-shadow: 0 4px 0 rgba(47,55,71,.22), inset 0 2px 4px rgba(255,255,255,.9);
-    }
-    .mode-dots {
-      position: absolute;
-      left: 38%;
-      bottom: 18%;
-      width: 13%;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10%;
-    }
-    .mode-dots span {
-      aspect-ratio: 1;
-      border-radius: 50%;
-      background: #f7f4ec;
-      border: 2px solid rgba(57,67,82,.18);
-      box-shadow: 0 3px 0 rgba(47,55,71,.2), inset 0 2px 4px rgba(255,255,255,.9);
     }
     .raw-strip {
       display: grid;
@@ -1029,11 +1041,13 @@ def _render_debug_page() -> str:
             <div class="pad-button shoulder" id="btn-r2" style="right: 24%">R2</div>
             <div class="pad-button shoulder" id="btn-r" style="right: 6%">R</div>
 
-            <div class="pad-button top-button" id="btn-select" style="left: 23%; top: 14%">-</div>
-            <div class="pad-button top-button" id="btn-start" style="right: 23%; top: 14%">+</div>
-            <div class="mini-button pad-button centered-button" id="btn-pair" style="left: 50%; top: 11%">pair</div>
+            <div class="system-row systemRow">
+              <div class="pad-button top-button" id="btn-select" style="left: 0; top: 22%">-</div>
+              <div class="pair-switch centered-button" id="btn-pair" style="left: 50%; top: 8%">pair</div>
+              <div class="pad-button top-button" id="btn-start" style="right: 0; top: 22%">+</div>
+            </div>
 
-            <div class="pad-button stick" id="btn-l3" style="left: 6%; top: 27%"><span>L3</span></div>
+            <div class="pad-button stick leftStick" id="btn-l3" style="left: 7%; top: 31%"><span>L3</span></div>
             <div class="dpad-cluster dpadCluster" id="dpadCluster">
               <div class="pad-button dpad-piece dpad-up" id="btn-dpad-up">↑</div>
               <div class="pad-button dpad-piece dpad-right" id="btn-dpad-right">→</div>
@@ -1042,12 +1056,11 @@ def _render_debug_page() -> str:
               <div class="dpad-center">L</div>
             </div>
 
-            <div class="pad-button face-button faceCluster" id="btn-y" style="right: 18%; top: 29%">Y</div>
-            <div class="pad-button face-button faceCluster" id="btn-x" style="right: 8%; top: 18%">X</div>
-            <div class="pad-button face-button faceCluster" id="btn-a" style="right: 8%; top: 43%">A</div>
-            <div class="pad-button face-button faceCluster" id="btn-b" style="right: 18%; top: 54%">B</div>
-            <div class="pad-button stick" id="btn-r3" style="right: 28%; top: 48%"><span>R3</span></div>
-            <div class="mode-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            <div class="pad-button face-button faceCluster faceDiamond" id="btn-y" style="right: 18%; top: 29%">Y</div>
+            <div class="pad-button face-button faceCluster faceDiamond" id="btn-x" style="right: 8%; top: 18%">X</div>
+            <div class="pad-button face-button faceCluster faceDiamond" id="btn-a" style="right: 8%; top: 43%">A</div>
+            <div class="pad-button face-button faceCluster faceDiamond" id="btn-b" style="right: 18%; top: 54%">B</div>
+            <div class="pad-button stick rightStick" id="btn-r3" style="right: 29%; top: 50%"><span>R3</span></div>
 
             <div class="pad-button mini-button" id="btn-star" style="left: 9%; bottom: 14%">★</div>
             <div class="pad-button mini-button" id="btn-home" style="right: 13%; bottom: 14%">⌂</div>
