@@ -11,7 +11,8 @@ from typing import Any, Mapping
 DEFAULT_CONFIG: dict[str, Any] = {
     "robot": {
         "name": "KidBot",
-        "child_name": "Ярослав",
+        "child_name": "",
+        "child_age": 7,
         "version": "0.1.0",
         "mock": False,
     },

@@ -1,28 +1,74 @@
-# picar-kidbot
+# Picar KidBot
 
-KidBot — Python-проект для робота SunFounder PiCar-X на Raspberry Pi 3B+.
-Он умеет ездить от 8BitDo Lite 2 Bluetooth-геймпада, плавно рулить и менять
-скорость, делать фото, показывать фото на простом сайте, говорить по-русски,
-читать короткие истории, играть звуки и использовать OpenAI для чата, STT и
-Vision, если есть интернет и переменная `OPENAI_API_KEY`.
+Picar KidBot — Python-проект для робота SunFounder PiCar-X на Raspberry Pi. Он
+не привязан к Raspberry Pi 3B+: подойдет любой Raspberry Pi, который работает с
+PiCar-X, камерой, Bluetooth/Wi-Fi и Python. Робот ездит от Bluetooth-пульта
+8BitDo Lite 2, делает фото, показывает их в локальном веб-интерфейсе,
+подключается к Wi-Fi как умные камеры, играет звуки, показывает живой
+debug-экран и может использовать OpenAI для чата, STT, TTS и Vision.
 
-В проекте есть две зоны кода:
+Мы сделали этот проект вместе с моим 7-летним сыном Ярославом. Ярослав собрал
+робота и был настоящим product owner: написал продуктовую спецификацию,
+проверял интерфейс, придумывал требования заказчика и честно говорил, когда
+кнопки или пульт выглядят не так.
 
-- `kidbot/kid_code/` — простые файлы, которые можно читать ребенку вместе со взрослым.
-- `kidbot/core/` — инфраструктура: железо, геймпад, веб, AI, логи, обновления.
+## Скриншоты
 
-## 1. Установка на Raspberry Pi
+Главная страница: фото, Wi-Fi, Bluetooth-пульт, звуки, обновления, OpenAI key и
+панели статуса.
 
-Самый простой способ с Mac, из локальной копии этого repo:
+![Picar setup and control panels](docs/screenshots/picar-setup.png)
+
+Debug-страница: live-пульт 8BitDo, батарея, передний датчик, стики, микрофонная
+волна, события и консоль.
+
+![Picar debug controller and telemetry](docs/screenshots/picar-debug.png)
+
+## Что умеет
+
+- Ездить от 8BitDo Lite 2 Bluetooth-геймпада с плавным рулением и скоростью.
+- Делать фото, показывать их на сайте, скачивать и удалять.
+- Поднимать setup Wi-Fi сеть, если робот не нашел домашний Wi-Fi.
+- Сканировать Wi-Fi и подключаться к выбранной сети через сайт.
+- Подключать Bluetooth-пульт через сайт.
+- Сохранять `OPENAI_API_KEY` локально на роботе и проверять, что ключ работает.
+- Играть звуки: мотор, бибик, готовность, ошибки и детский хаос по кнопке.
+- Включать звук мотора во время движения.
+- Показывать debug-страницу с WebSocket-обновлениями почти без задержки.
+- Проверять обновления вручную через web UI и откатываться на стабильный build.
+
+## Оглавление проекта
+
+- `kidbot/kid_code/` — простые файлы, которые можно читать ребенку вместе со
+  взрослым: логика езды, действия кнопок, характер робота.
+- `kidbot/core/` — инфраструктура: железо, веб-сервер, Bluetooth, Wi-Fi,
+  камера, AI, логи, обновления, debug-состояние.
+- `assets/` — истории, музыка и звуковые эффекты.
+- `tools/` — setup-скрипты и генерация sample audio.
+- `tests/` — unit-тесты для поведения, веба, конфигурации и железных адаптеров.
+
+## Установка на Raspberry Pi
+
+Самый простой способ с Mac или Linux-компьютера:
 
 ```bash
-./tools/setup_robot.sh
+./tools/setup_robot.sh --host pi@picar.local
 ```
 
-По умолчанию скрипт подключается к `pi@picar.local`, копирует deploy key на
-Raspberry Pi, настраивает доступ к private GitHub repo, клонирует или обновляет
-проект в `/home/pi/picar`, запускает `./install.sh` и сразу стартует
-`kidbot.service`.
+По умолчанию скрипт клонирует публичный репозиторий по HTTPS:
+
+```text
+https://github.com/knovikov/picar.git
+```
+
+Он копирует bootstrap-команды на Raspberry Pi, ставит зависимости, запускает
+`./install.sh`, включает `kidbot.service` и перезапускает сервис. Обычно reboot
+не нужен: робот должен запуститься сразу после setup. Если хочется чистый
+первый старт после установки системных пакетов, добавь:
+
+```bash
+./tools/setup_robot.sh --host pi@picar.local --reboot
+```
 
 Если hostname другой:
 
@@ -30,22 +76,17 @@ Raspberry Pi, настраивает доступ к private GitHub repo, кло
 ./tools/setup_robot.sh --host pi@192.168.1.42
 ```
 
-Если хочется перезагрузить робота после установки:
+Если ты используешь private fork, включи deploy-key режим:
 
 ```bash
-./tools/setup_robot.sh --reboot
+./tools/setup_robot.sh --private --repo yourname/picar --host pi@picar.local
 ```
-
-Обычно перезагрузка не нужна: setup-скрипт в конце делает
-`sudo systemctl restart kidbot.service`, и робот должен запуститься сразу.
-Reboot полезен только как чистый первый старт после установки системных пакетов,
-групп `bluetooth/input` или если Bluetooth/joystick ведут себя странно.
 
 Ручной запасной способ:
 
 ```bash
 cd /home/pi
-git clone git@github.com-picar:knovikov/picar.git picar
+git clone https://github.com/knovikov/picar.git picar
 cd picar
 chmod +x install.sh run.sh update.sh tools/generate_sample_audio.py
 ./install.sh
@@ -62,112 +103,21 @@ python3 tools/generate_sample_audio.py
 KIDBOT_MOCK=1 python3 -m kidbot.main
 ```
 
-## 2. Подключение Bluetooth-пульта
-
-Самый простой способ — через сайт KidBot:
-
-1. Открой веб-интерфейс робота.
-2. Включи pairing mode на Bluetooth-пульте.
-3. В блоке `Пульт` нажми `Найти Bluetooth`.
-4. Выбери пульт в списке.
-5. Нажми `Подключить пульт`.
-
-Если пульт уже знаком роботу, он обычно подключится сразу. Если это первое
-подключение, держи пульт в pairing mode до конца подключения.
-
-Ручной запасной способ на Raspberry Pi:
-
-На Raspberry Pi:
-
-```bash
-bluetoothctl
-power on
-agent on
-default-agent
-scan on
-```
-
-Переведи 8BitDo Lite 2 в режим Bluetooth pairing. Когда пульт появится:
+Открой:
 
 ```text
-pair XX:XX:XX:XX:XX:XX
-trust XX:XX:XX:XX:XX:XX
-connect XX:XX:XX:XX:XX:XX
-quit
+http://127.0.0.1:8080
 ```
 
-У 8BitDo в разных режимах могут отличаться номера осей и кнопок. Перед первой
-поездкой обязательно проверь маппинг.
+## Веб-интерфейс
 
-## 3. Проверка кнопок и стиков
-
-```bash
-python3 -m tests.test_controller_print
-```
-
-Скрипт печатает:
-
-- `axes`
-- `buttons`
-- `hats / dpad`
-- сырые значения
-- нормализованные значения
-
-После проверки поправь `config.yaml`, если номера отличаются:
-
-```yaml
-controller:
-  axes:
-    steering: 0
-    throttle: 3
-  buttons:
-    a: 0
-    b: 1
-```
-
-## 4. Ручной запуск
-
-На настоящем роботе:
-
-```bash
-python3 -m kidbot.main
-```
-
-Без железа:
-
-```bash
-KIDBOT_MOCK=1 python3 -m kidbot.main
-```
-
-Mock-режим нужен честно: он проверяет логику, фото, логи, веб-маршруты и код
-кнопок, но не притворяется, что PiCar-X подключен.
-
-## 5. Автостарт
-
-`install.sh` устанавливает:
-
-- `kidbot.service`
-- `kidbot-updater.service`
-- `kidbot-updater.timer` в выключенном состоянии
-
-Полезные команды:
-
-```bash
-sudo systemctl enable kidbot.service
-sudo systemctl start kidbot.service
-sudo systemctl status kidbot.service
-sudo systemctl restart kidbot.service
-```
-
-## 6. Где смотреть фото
-
-Если работает hostname:
+На роботе:
 
 ```text
 http://picar.local:8080
 ```
 
-Если hostname не открылся, нажми `R1` для статуса или выполни:
+Если hostname не открылся, нажми `R1` для статуса или выполни на Raspberry Pi:
 
 ```bash
 hostname -I
@@ -179,7 +129,189 @@ hostname -I
 http://192.168.x.x:8080
 ```
 
-Маршруты:
+На главной странице можно смотреть и удалять фото, скачивать файлы, видеть
+статус робота и батареи, запускать звуки, подключать Wi-Fi, подключать
+Bluetooth-пульт, сохранять OpenAI key, проверять ключ и управлять обновлениями.
+
+Debug-страница:
+
+```text
+http://picar.local:8080/debug
+```
+
+Она показывает live-состояние пульта, заряд батареи, передний датчик
+расстояния, кнопки, стики, последние события, логи и звуковую волну. Данные
+пульта, батареи, датчика и логов идут по WebSocket `/ws/debug` с маленькой
+задержкой.
+
+## Setup Wi-Fi
+
+Если робот загрузился и не нашел Wi-Fi, он попробует включить точку доступа:
+
+```text
+KidBot-Setup
+```
+
+Пароль по умолчанию:
+
+```text
+kidbot1234
+```
+
+Подключись к этой сети с телефона или ноутбука и открой:
+
+```text
+http://192.168.4.1:8080
+```
+
+Там можно выбрать домашнюю Wi-Fi сеть, ввести пароль и сохранить OpenAI API key.
+После подключения к домашнему Wi-Fi робот снова будет доступен по обычному IP.
+
+Настройки лежат в `config.yaml`:
+
+```yaml
+setup_ap:
+  enabled: true
+  auto_start_when_no_wifi: true
+  ssid: "KidBot-Setup"
+  password: "kidbot1234"
+  interface: "wlan0"
+  address: "192.168.4.1/24"
+```
+
+Важно: `kidbot1234` — публичный demo-пароль. Перед настоящим использованием
+лучше поменять его в `config.yaml`.
+
+## Bluetooth-пульт
+
+Через сайт:
+
+1. Открой веб-интерфейс робота.
+2. Включи pairing mode на Bluetooth-пульте.
+3. В блоке `Пульт` нажми `Найти Bluetooth`.
+4. Выбери пульт в списке.
+5. Нажми `Подключить пульт`.
+
+Ручной запасной способ:
+
+```bash
+bluetoothctl
+power on
+agent on
+default-agent
+scan on
+pair XX:XX:XX:XX:XX:XX
+trust XX:XX:XX:XX:XX:XX
+connect XX:XX:XX:XX:XX:XX
+quit
+```
+
+У 8BitDo в разных режимах могут отличаться номера осей и кнопок. Перед первой
+поездкой проверь маппинг:
+
+```bash
+python3 -m tests.test_controller_print
+```
+
+## Кнопки
+
+Когда робот едет, он сам запускает моторный звук: тихий `engine_idle.wav` на
+маленькой скорости и `engine_rev.wav`, когда скорость выше.
+
+- `A`: сделать фото и сказать “Фотография готова!”
+- `B`: включить или остановить случайную музыку.
+- `X`: прочитать короткую русскую историю.
+- `Y`: сделать фото и смешно, но доброжелательно описать сцену.
+- двойное `Y`: спокойно описать сцену.
+- удержание `Y`: посмотреть влево, вперед, вправо и дать обзор.
+- `Select`: очистить историю разговора.
+- `Start`: аварийно остановить движение, голос и музыку.
+- `L1`: push-to-talk, если доступен OpenAI.
+- `R1`: проговорить статус робота.
+- `L2`: искать предмет с подсказкой.
+- `R2`: найти что-нибудь интересное.
+
+Настройки моторного звука:
+
+```yaml
+engine_sound:
+  enabled: true
+  min_speed: 4
+  rev_speed: 18
+```
+
+Если звук надоел, поставь `enabled: false`.
+
+## OpenAI
+
+Ключ нельзя хранить в репозитории. Его можно ввести через веб-интерфейс Picar:
+он сохраняется в локальный файл `.env` с правами `600`.
+
+Локальный вариант:
+
+```bash
+cp .env.example .env
+echo 'OPENAI_API_KEY="sk-..."' >> .env
+```
+
+Кнопка `Проверить ключ` делает маленький тестовый запрос к OpenAI и показывает,
+работает ли ключ, какая модель проверялась, `x-request-id` и remaining
+requests/tokens, если OpenAI вернул rate-limit headers.
+
+Важно: это не показывает денежный баланс аккаунта. Баланс, месячный spend и
+подробный organization usage обычным robot API key не видны; для этого нужен
+OpenAI admin key или dashboard.
+
+Если ключа нет, Picar все равно ездит, фотографирует, открывает веб-страницу,
+играет звуки, читает истории и говорит через `espeak-ng`. Chat, STT и Vision
+заменяются дружелюбными offline-фразами.
+
+## Обновления и rollback
+
+Обновления не скачиваются автоматически при включении робота. Это сделано
+специально: плохой commit не должен неожиданно приехать во время обычного
+запуска.
+
+В web UI есть блок `Обновления`:
+
+- `Проверить` — сделать `git fetch` и показать, есть ли новый commit.
+- `Обновить` — сохранить текущий commit как стабильный, сделать
+  `git pull --ff-only`, обновить зависимости и перезапустить сервис.
+- `Откатиться` — вернуться к сохраненному стабильному commit.
+
+Стабильный build хранится локально:
+
+```text
+.kidbot/stable-build.json
+```
+
+Аварийный rollback без сайта: зажми `Select` и `Start` на пульте примерно на 2
+секунды. Это откатит робота на сохраненную стабильную версию и перезапустит
+сервис.
+
+## Логи
+
+Файлы лежат в `logs/`:
+
+- `kidbot.log`
+- `errors.log`
+- `controller.log`
+- `network.log`
+- `ai.log`
+
+Systemd-логи:
+
+```bash
+journalctl -u kidbot.service -f
+```
+
+Локальные логи:
+
+```bash
+tail -f logs/kidbot.log logs/errors.log
+```
+
+## API маршруты
 
 - `GET /`
 - `GET /photos`
@@ -205,287 +337,24 @@ http://192.168.x.x:8080
 - `GET /debug`
 - `GET /ws/debug`
 
-На главной странице можно:
+## Безопасность перед public repo
 
-- смотреть последние фото
-- скачивать фото
-- удалять фото
-- видеть заряд батареи, если PiCar-X SDK отдает вольтаж
-- запускать смешные звуки и проверять динамик: пуки, мотор, бибик
-- сканировать Wi-Fi сети
-- выбрать сеть и ввести пароль
-- включить setup-сеть вручную
-- найти и подключить Bluetooth-пульт
-- сохранить `OPENAI_API_KEY`
-- проверить, что `OPENAI_API_KEY` работает
-- посмотреть remaining requests/tokens из OpenAI rate-limit headers, если OpenAI вернул эти headers
-- вручную проверить и скачать обновление из GitHub
-- откатиться на стабильную версию, если обновление не понравилось
+В репозиторий не должны попадать:
 
-Debug-страница:
+- `.env` и любые реальные API keys.
+- `.deploy-keys/` и любые private SSH keys.
+- `logs/` с персональными логами.
+- `photos/` с личными фотографиями.
+- `.kidbot/` со стабильным локальным build state.
 
-```text
-http://picar.local:8080/debug
-```
-
-Она показывает live-состояние пульта, заряд батареи, передний датчик
-расстояния, кнопки, стики, последние события, логи и звуковую волну. Данные
-пульта, батареи, датчика и логов идут по WebSocket `/ws/debug` с маленькой
-задержкой. Кнопка `Микрофон браузера` рисует волну с микрофона устройства, на
-котором открыт сайт; отдельный robot-mic backend можно добавить позже.
-
-Пороги батареи лежат в `config.yaml`:
-
-```yaml
-battery:
-  poll_seconds: 5
-  empty_voltage: 6.4
-  low_voltage: 6.8
-  critical_voltage: 6.4
-  full_voltage: 8.4
-```
-
-Если SDK робота не умеет читать battery voltage, сайт честно покажет
-`нет данных`.
-
-## 6.1 Setup-сеть как у умных камер
-
-Если робот загрузился и не нашел Wi-Fi, он попробует включить точку доступа:
-
-```text
-KidBot-Setup
-```
-
-Пароль по умолчанию:
-
-```text
-kidbot1234
-```
-
-Подключись к этой сети с телефона или ноутбука и открой:
-
-```text
-http://192.168.4.1:8080
-```
-
-Там можно выбрать домашнюю Wi-Fi сеть, ввести пароль и сохранить OpenAI API key.
-После подключения к домашнему Wi-Fi робот снова будет доступен по обычному IP.
-
-Настройки setup-сети лежат в `config.yaml`:
-
-```yaml
-setup_ap:
-  enabled: true
-  auto_start_when_no_wifi: true
-  ssid: "KidBot-Setup"
-  password: "kidbot1234"
-  interface: "wlan0"
-  address: "192.168.4.1/24"
-```
-
-Для режима точки доступа используется NetworkManager и `nmcli`. `install.sh`
-ставит `network-manager`, включает сервис и добавляет ограниченное sudo-правило,
-чтобы веб-интерфейс мог запускать `nmcli` без пароля.
-
-## 7. Кнопки
-
-Когда робот едет, он сам запускает моторный звук: тихий `engine_idle.wav` на
-маленькой скорости и `engine_rev.wav`, когда скорость выше. Настройки лежат в
-`config.yaml`:
-
-```yaml
-engine_sound:
-  enabled: true
-  min_speed: 4
-  rev_speed: 18
-```
-
-Если звук надоел, поставь `enabled: false`.
-
-- `A`: сделать фото и сказать “Фотография готова!”
-- `B`: включить или остановить случайную музыку
-- `X`: прочитать короткую русскую историю
-- `Y`: сделать фото и смешно, но доброжелательно описать сцену
-- двойное `Y`: спокойно описать сцену
-- удержание `Y`: посмотреть влево, вперед, вправо и дать обзор
-- `Select`: очистить историю разговора
-- `Start`: аварийно остановить движение, голос и музыку
-- `L1`: push-to-talk, если доступен OpenAI
-- `R1`: проговорить статус робота
-- `L2`: искать предмет с подсказкой
-- `R2`: найти что-нибудь интересное
-
-## 8. OpenAI
-
-Ключ нельзя хранить в репозитории.
+Эти пути уже добавлены в `.gitignore`. Для публичного проекта используйте HTTPS
+clone. Deploy key нужен только для private fork и создается локально через:
 
 ```bash
-export OPENAI_API_KEY="sk-..."
-python3 -m kidbot.main
+./tools/setup_robot.sh --private
 ```
 
-Ключ также можно ввести через веб-интерфейс KidBot. Он сохраняется в локальный
-файл `.env` с правами `600`; этот файл добавлен в `.gitignore`.
-
-В веб-интерфейсе есть кнопка `Проверить ключ`. Она делает маленький тестовый
-запрос к OpenAI и показывает:
-
-- работает ли ключ
-- какая модель проверялась
-- `x-request-id`
-- сколько осталось requests/tokens до rate limit reset, если эти headers пришли
-
-Важно: это не показывает денежный баланс аккаунта. Баланс, месячный spend и
-подробный organization usage обычным robot API key не видны; для этого нужен
-OpenAI admin key или dashboard.
-
-Если ключа нет, KidBot все равно ездит, фотографирует, открывает веб-страницу,
-играет звуки, читает истории и говорит через `espeak-ng`. Chat, STT и Vision
-заменяются дружелюбными offline-фразами.
-
-## 9. Логи
-
-Файлы лежат в `logs/`:
-
-- `kidbot.log`
-- `errors.log`
-- `controller.log`
-- `network.log`
-- `ai.log`
-
-Смотреть systemd-логи:
-
-```bash
-journalctl -u kidbot.service -f
-```
-
-Смотреть локальные логи:
-
-```bash
-tail -f logs/kidbot.log logs/errors.log
-```
-
-## 10. Обновление
-
-Обновления не скачиваются автоматически при включении робота. Это важно:
-плохой commit не должен неожиданно приехать во время обычного запуска.
-
-Открой сайт робота и используй блок `Обновления`:
-
-- `Проверить` — сделать `git fetch` и показать, есть ли новый commit.
-- `Обновить` — сохранить текущий commit как стабильный, сделать
-  `git pull --ff-only`, обновить зависимости и перезапустить сервис.
-- `Откатиться` — вернуться к сохраненному стабильному commit.
-
-Стабильный build хранится локально:
-
-```text
-.kidbot/stable-build.json
-```
-
-Файл добавлен в `.gitignore`.
-
-Скрипт `update.sh` оставлен как ручной запасной инструмент:
-
-```bash
-./update.sh
-```
-
-`install.sh` отключает `kidbot-updater.timer`, чтобы обновления не запускались
-при boot и раз в сутки. Проверить это можно так:
-
-```bash
-sudo systemctl status kidbot-updater.timer
-sudo systemctl list-timers kidbot-updater.timer
-```
-
-Аварийный rollback без сайта: зажми `Select` и `Start` на пульте примерно на 2
-секунды. Это откатит робота на сохраненную стабильную версию и перезапустит
-сервис.
-
-Чтобы робот мог обновляться из private GitHub repo, ему нужен read-only deploy
-key. Setup-скрипт делает это автоматически: генерирует локальный ключ в
-`.deploy-keys/`, добавляет public key в GitHub через `gh`, копирует private key
-на Raspberry Pi и настраивает SSH-алиас:
-
-```text
-Host github.com-picar
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/picar_github
-  IdentitiesOnly yes
-```
-
-После этого `origin` на Raspberry Pi должен быть таким:
-
-```bash
-git remote set-url origin git@github.com-picar:knovikov/picar.git
-git branch --set-upstream-to=origin/main main
-```
-
-Setup-скрипт тоже делает это сам. После этого web update и `./update.sh`
-смогут делать `git fetch` / `git pull --ff-only` без ввода GitHub password.
-
-## 11. Если пропал интернет
-
-KidBot должен сказать один раз:
-
-```text
-Интернет пропал. Я все еще умею ездить, фотографировать и шутить простыми шутками.
-```
-
-Когда интернет вернется:
-
-```text
-Интернет вернулся. Мой ум снова подключен к облакам.
-```
-
-`kidbot/core/network.py` специально отделен от остального кода, чтобы сеть,
-камера, езда и сайт не мешали друг другу.
-
-## 12. Если пульт не подключается
-
-Сначала попробуй через сайт: блок `Пульт` → `Найти Bluetooth` →
-`Подключить пульт`.
-
-Проверь Bluetooth:
-
-```bash
-bluetoothctl devices
-bluetoothctl info XX:XX:XX:XX:XX:XX
-```
-
-Проверь joystick-устройство:
-
-```bash
-ls -l /dev/input/js*
-jstest /dev/input/js0
-```
-
-Потом запусти:
-
-```bash
-python3 -m tests.test_controller_print
-```
-
-Если номера кнопок или стиков отличаются, поменяй `config.yaml`.
-
-## 13. Если камера не работает
-
-Проверь, видит ли Raspberry Pi камеру:
-
-```bash
-libcamera-hello --list-cameras
-python3 -m tests.test_camera
-```
-
-Если проверка идет не на Raspberry Pi:
-
-```bash
-KIDBOT_MOCK=1 python3 -m tests.test_camera
-```
-
-## 14. Тестовые команды
+## Тесты
 
 ```bash
 python3 -m tests.test_controller_print
@@ -498,5 +367,9 @@ python3 -m tests.test_web_server
 Все автоматические behavior-тесты:
 
 ```bash
-python3 -m unittest tests.test_drive tests.test_camera tests.test_voice tests.test_web_server -v
+python3 -m unittest -v
 ```
+
+## License
+
+MIT License. См. [LICENSE](LICENSE).

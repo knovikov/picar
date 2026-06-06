@@ -327,7 +327,8 @@ def _handle_button_events(button_events: list[tuple[str, str]], actions: ButtonA
         elif name == "l1" and event == "release":
             actions.press_l1_push_to_talk()
         elif name == "l2" and event == "press":
-            actions.press_l2_find_thing("предмет, который попросил найти Ярослав")
+            child_name = str(config.get("robot", {}).get("child_name", "")).strip() or "ребенок"
+            actions.press_l2_find_thing(f"предмет, который попросил найти {child_name}")
         elif name == "r2" and event == "press":
             actions.press_r2_find_interesting()
 

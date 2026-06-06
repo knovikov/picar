@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
-from kidbot.kid_code.robot_personality import OFFLINE_SMART_REPLY, PERSONALITY_PROMPT
+from kidbot.kid_code.robot_personality import OFFLINE_SMART_REPLY, build_personality_prompt
 
 logger = logging.getLogger("kidbot.ai")
 
@@ -15,8 +15,13 @@ logger = logging.getLogger("kidbot.ai")
 class AIChat:
     def __init__(self, config: dict[str, Any]):
         openai_config = config.get("openai", {})
+        robot_config = config.get("robot", {})
         self.chat_model = openai_config.get("chat_model", "gpt-5-mini")
         self.stt_model = openai_config.get("stt_model", "gpt-4o-mini-transcribe")
+        self.child_name = str(robot_config.get("child_name", "")).strip()
+        self.child_label = self.child_name or "Ребенок"
+        self.child_age = int(robot_config.get("child_age", 7))
+        self.personality_prompt = build_personality_prompt(self.child_name, self.child_age)
         self.history: list[dict[str, str]] = []
         self.client = None
 
@@ -38,7 +43,7 @@ class AIChat:
         try:
             response = self.client.responses.create(
                 model=self.chat_model,
-                instructions=PERSONALITY_PROMPT,
+                instructions=self.personality_prompt,
                 input=self._response_input(),
             )
             answer = response.output_text.strip()
@@ -68,7 +73,7 @@ class AIChat:
     def _response_input(self) -> str:
         lines = []
         for message in self.history:
-            role = "Ярослав" if message["role"] == "user" else "KidBot"
+            role = self.child_label if message["role"] == "user" else "KidBot"
             lines.append(f"{role}: {message['content']}")
         return "\n".join(lines)
 

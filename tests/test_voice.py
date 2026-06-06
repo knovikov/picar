@@ -11,13 +11,12 @@ class VoiceTests(unittest.TestCase):
             command_runner=lambda command: spoken.append(command),
         )
 
-        voice.say("Привет, Ярослав!")
+        voice.say("Привет, пилот!")
 
         self.assertEqual(len(spoken), 1)
         self.assertEqual(spoken[0][0], "espeak-ng")
-        self.assertIn("Привет, Ярослав!", spoken[0])
+        self.assertIn("Привет, пилот!", spoken[0])
 
 
 if __name__ == "__main__":
     unittest.main()
-

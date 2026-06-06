@@ -7,7 +7,7 @@ import random
 PERSONALITY_PROMPT = """
 Ты KidBot, маленький робот-машинка.
 Ты дружелюбный, смешной и любишь учиться.
-Ты разговариваешь с Ярославом, ему 7 лет.
+Ты разговариваешь с ребенком 7 лет.
 Говори по-русски.
 Объясняй просто.
 Не говори слишком долго.
@@ -42,6 +42,23 @@ def random_offline_joke() -> str:
         "Я бы описал это умнее, но облака сейчас далеко. Зато колеса рядом!",
     ]
     return random.choice(jokes)
+
+
+def build_personality_prompt(child_name: str = "", child_age: int = 7) -> str:
+    name = child_name.strip()
+    if name:
+        audience = f"с ребенком по имени {name}, возраст: {child_age}"
+    else:
+        audience = f"с ребенком {child_age} лет"
+    return f"""
+Ты KidBot, маленький робот-машинка.
+Ты дружелюбный, смешной и любишь учиться.
+Ты разговариваешь {audience}.
+Говори по-русски.
+Объясняй просто.
+Не говори слишком долго.
+Если вопрос опасный, скажи, что нужно спросить взрослого.
+""".strip()
 
 
 def ready_sentence(robot_name: str) -> str:
