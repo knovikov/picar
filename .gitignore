@@ -8,3 +8,6 @@ logs/*.log.*
 photos/*.jpg
 photos/*.jpeg
 photos/*.png
+
+# Local robot deploy keys. Keep private keys out of git.
+.deploy-keys/
