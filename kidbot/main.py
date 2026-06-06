@@ -195,6 +195,7 @@ def _start_web_server(config: dict, status: StatusTracker, logger: logging.Logge
             openai_model=str(config.get("openai", {}).get("chat_model", "gpt-5-mini")),
             repo_dir=project_root(),
             debug_store=debug_store,
+            sounds_dir=resolve_path(config, "sounds"),
             access_point_config=AccessPointConfig(
                 ssid=str(setup_ap_config.get("ssid", "KidBot-Setup")),
                 password=str(setup_ap_config.get("password", "kidbot1234")),

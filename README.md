@@ -187,6 +187,8 @@ http://192.168.x.x:8080
 - `DELETE /api/photos/{filename}`
 - `GET /api/status`
 - `GET /api/photos`
+- `GET /api/sounds`
+- `POST /api/sounds/{filename}/play`
 - `GET /api/wifi/scan`
 - `POST /api/wifi/connect`
 - `POST /api/setup/access-point`
@@ -209,6 +211,7 @@ http://192.168.x.x:8080
 - скачивать фото
 - удалять фото
 - видеть заряд батареи, если PiCar-X SDK отдает вольтаж
+- запускать смешные звуки и проверять динамик: пуки, мотор, бибик
 - сканировать Wi-Fi сети
 - выбрать сеть и ввести пароль
 - включить setup-сеть вручную

@@ -24,6 +24,9 @@ def main() -> None:
     write_sequence(sounds / "error.wav", [(220, 0.12), (180, 0.12), (140, 0.2)])
     write_funny_buzz(sounds / "fart_1.wav", base=95)
     write_funny_buzz(sounds / "fart_2.wav", base=125)
+    write_engine_idle(sounds / "engine_idle.wav")
+    write_engine_rev(sounds / "engine_rev.wav")
+    write_horn(sounds / "horn.wav")
     write_sequence(
         music / "sample_song_1.wav",
         [(523, 0.18), (659, 0.18), (784, 0.18), (1046, 0.28), (784, 0.18), (659, 0.18)],
@@ -60,6 +63,72 @@ def write_funny_buzz(path: Path, base: float) -> None:
         sample = math.sin(2 * math.pi * frequency * t) * 0.35 * envelope
         frames.extend(pack_sample(sample))
     write_wav(path, frames)
+
+
+def write_engine_idle(path: Path) -> None:
+    if path.exists():
+        return
+
+    frames = bytearray()
+    total_samples = int(SAMPLE_RATE * 1.15)
+    for index in range(total_samples):
+        t = index / SAMPLE_RATE
+        wobble = 5 * math.sin(t * 9) + 3 * math.sin(t * 17)
+        sample = engine_sample(t, 72 + wobble, amplitude=0.34)
+        frames.extend(pack_sample(sample))
+    write_wav(path, frames)
+
+
+def write_engine_rev(path: Path) -> None:
+    if path.exists():
+        return
+
+    frames = bytearray()
+    duration = 1.35
+    total_samples = int(SAMPLE_RATE * duration)
+    for index in range(total_samples):
+        t = index / SAMPLE_RATE
+        progress = t / duration
+        frequency = 62 + 140 * (progress**1.8)
+        envelope = min(1.0, progress * 6) * max(0.0, 1.0 - max(0.0, progress - 0.82) * 5)
+        sample = engine_sample(t, frequency, amplitude=0.38 * envelope)
+        frames.extend(pack_sample(sample))
+    write_wav(path, frames)
+
+
+def write_horn(path: Path) -> None:
+    if path.exists():
+        return
+
+    frames = bytearray()
+    for frequency, duration in ((440, 0.18), (0, 0.06), (440, 0.26)):
+        if frequency:
+            frames.extend(horn_tone(frequency, duration))
+        else:
+            frames.extend(tone(0, duration, 0))
+    write_wav(path, frames)
+
+
+def engine_sample(t: float, frequency: float, amplitude: float) -> float:
+    fundamental = math.sin(2 * math.pi * frequency * t)
+    second = 0.55 * math.sin(2 * math.pi * frequency * 2.01 * t)
+    third = 0.22 * math.sin(2 * math.pi * frequency * 3.03 * t)
+    chop = 0.78 + 0.22 * math.sin(2 * math.pi * 13 * t)
+    return (fundamental + second + third) / 1.77 * amplitude * chop
+
+
+def horn_tone(frequency: float, duration: float) -> bytes:
+    frames = bytearray()
+    total_samples = int(SAMPLE_RATE * duration)
+    for index in range(total_samples):
+        t = index / SAMPLE_RATE
+        attack = min(1.0, index / max(1, SAMPLE_RATE * 0.02))
+        sample = (
+            math.sin(2 * math.pi * frequency * t)
+            + 0.4 * math.sin(2 * math.pi * frequency * 1.5 * t)
+        ) * 0.32 * attack
+        frames.extend(pack_sample(sample))
+    return bytes(frames)
 
 
 def tone(frequency: float, duration: float, amplitude: float) -> bytes:

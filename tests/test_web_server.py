@@ -117,6 +117,34 @@ class WebServerTests(unittest.TestCase):
         self.assertIn("bluetoothDevice", html)
         self.assertIn("/api/bluetooth/scan", html)
 
+    def test_index_contains_soundboard(self):
+        from kidbot.core.web_server import _render_index
+        from kidbot.core.wifi_setup import AccessPointConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sounds_dir = Path(tmpdir)
+            engine = sounds_dir / "engine_rev.wav"
+            fart = sounds_dir / "fart_1.wav"
+            engine.write_bytes(b"engine")
+            fart.write_bytes(b"fart")
+            status = {
+                "robot_name": "KidBot",
+                "version": "0.1.0",
+                "wifi_connected": True,
+                "internet_connected": True,
+                "ip_address": "127.0.0.1",
+                "controller_connected": False,
+                "latest_error": None,
+                "uptime_seconds": 1,
+            }
+
+            html = _render_index(status, [], {"masked": "not set"}, AccessPointConfig(), [engine, fart])
+
+        self.assertIn("Звуки", html)
+        self.assertIn("Рев мотора", html)
+        self.assertIn("Пук 1", html)
+        self.assertIn("/api/sounds/", html)
+
     def test_index_header_uses_picar_brand_name(self):
         from kidbot.core.web_server import _render_index
         from kidbot.core.wifi_setup import AccessPointConfig
@@ -248,6 +276,50 @@ class WebServerTests(unittest.TestCase):
 
         self.assertIn("controller", payload)
         self.assertIn("status", payload)
+
+    def test_sound_api_lists_and_plays_safe_audio_files(self):
+        from fastapi.testclient import TestClient
+
+        from kidbot.core.status import SystemStatus
+        from kidbot.core.web_server import create_app
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            photo_dir = root / "photos"
+            sounds_dir = root / "sounds"
+            photo_dir.mkdir()
+            sounds_dir.mkdir()
+            (sounds_dir / "engine_rev.wav").write_bytes(b"not really wav")
+            played = []
+
+            def status_provider():
+                return SystemStatus(
+                    robot_name="KidBot",
+                    version="0.1.0",
+                    wifi_connected=True,
+                    internet_connected=True,
+                    ip_address="127.0.0.1",
+                    controller_connected=False,
+                    latest_error=None,
+                    uptime_seconds=1,
+                )
+
+            app = create_app(
+                photo_dir,
+                status_provider,
+                repo_dir=root,
+                sounds_dir=sounds_dir,
+                sound_player=lambda path: played.append(path.name),
+            )
+            client = TestClient(app)
+
+            sounds = client.get("/api/sounds").json()
+            response = client.post("/api/sounds/engine_rev.wav/play")
+
+        self.assertEqual(sounds[0]["name"], "engine_rev.wav")
+        self.assertEqual(sounds[0]["label"], "Рев мотора")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(played, ["engine_rev.wav"])
 
 
 if __name__ == "__main__":

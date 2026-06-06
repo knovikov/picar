@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger("kidbot.media")
+AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg"}
 
 
 class MediaPlayer:
@@ -25,15 +26,15 @@ class MediaPlayer:
     def play_sound(self, name: str) -> None:
         path = self.sounds_dir / name
         if path.exists():
-            self._play_file(path, wait=False)
+            play_audio_file(path, wait=False)
 
     def play_random_music(self) -> None:
-        files = _audio_files(self.music_dir)
+        files = list_audio_files(self.music_dir)
         if not files:
             logger.warning("no music files found in %s", self.music_dir)
             return
         self.stop_music()
-        self._music_process = self._play_file(random.choice(files), wait=False)
+        self._music_process = play_audio_file(random.choice(files), wait=False)
 
     def stop_music(self) -> None:
         if self.is_music_playing:
@@ -50,24 +51,24 @@ class MediaPlayer:
             return "Я пока не нашел сказки. Похоже, книжная полка пустая."
         return random.choice(stories).read_text(encoding="utf-8").strip()
 
-    def _play_file(self, path: Path, wait: bool) -> Optional[subprocess.Popen]:
-        command = _player_command(path)
-        try:
-            if wait:
-                subprocess.run(command, check=False)
-                return None
-            return subprocess.Popen(command)
-        except FileNotFoundError as exc:
-            logger.error("audio player not found: %s", exc)
-            return None
-
-
-def _audio_files(directory: Path) -> list[Path]:
+def list_audio_files(directory: Path) -> list[Path]:
     return sorted(
         path
         for path in Path(directory).glob("*")
-        if path.suffix.lower() in {".wav", ".mp3", ".ogg"}
+        if path.suffix.lower() in AUDIO_EXTENSIONS
     )
+
+
+def play_audio_file(path: Path, wait: bool = False) -> Optional[subprocess.Popen]:
+    command = _player_command(path)
+    try:
+        if wait:
+            subprocess.run(command, check=False)
+            return None
+        return subprocess.Popen(command)
+    except FileNotFoundError as exc:
+        logger.error("audio player not found: %s", exc)
+        return None
 
 
 def _player_command(path: Path) -> list[str]:

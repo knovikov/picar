@@ -13,6 +13,7 @@ from typing import Callable, Optional
 from kidbot.core.bluetooth_setup import connect_bluetooth_device, disconnect_bluetooth_device, scan_bluetooth_devices
 from kidbot.core.config import DEFAULT_CONFIG
 from kidbot.core.debug_state import DebugStateStore
+from kidbot.core.media import list_audio_files, play_audio_file
 from kidbot.core.openai_health import check_openai_api_key
 from kidbot.core.secrets import openai_key_status, save_openai_api_key
 from kidbot.core.status import SystemStatus
@@ -28,6 +29,10 @@ def list_photo_files(photo_dir: Path) -> list[Path]:
         (path for path in Path(photo_dir).iterdir() if path.suffix.lower() in PHOTO_EXTENSIONS),
         key=lambda path: path.name,
     )
+
+
+def list_sound_files(sounds_dir: Path) -> list[Path]:
+    return list_audio_files(Path(sounds_dir))
 
 
 def delete_photo_file(photo_dir: Path, filename: str) -> bool:
@@ -69,6 +74,8 @@ def create_app(
     repo_dir: Optional[Path] = None,
     update_manager: Optional[UpdateManager] = None,
     debug_store: Optional[DebugStateStore] = None,
+    sounds_dir: Optional[Path] = None,
+    sound_player: Optional[Callable[[Path], object]] = None,
 ):
     try:
         from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -85,18 +92,22 @@ def create_app(
     repo_dir = Path(repo_dir or Path.cwd())
     update_manager = update_manager or UpdateManager(repo_dir)
     debug_store = debug_store or DebugStateStore()
+    sounds_dir = Path(sounds_dir or DEFAULT_CONFIG["paths"]["sounds"])
+    sound_player = sound_player or (lambda path: play_audio_file(path, wait=False))
 
     @app.get("/", response_class=HTMLResponse)
     def index():
         status = build_status_payload(status_provider())
         photos = list_photo_files(photo_dir)[-12:]
-        return _render_index(status, photos, openai_key_status(env_path), access_point_config)
+        sounds = list_sound_files(sounds_dir)
+        return _render_index(status, photos, openai_key_status(env_path), access_point_config, sounds)
 
     @app.get("/photos", response_class=HTMLResponse)
     def photos_page():
         status = build_status_payload(status_provider())
         photos = list_photo_files(photo_dir)
-        return _render_index(status, photos, openai_key_status(env_path), access_point_config)
+        sounds = list_sound_files(sounds_dir)
+        return _render_index(status, photos, openai_key_status(env_path), access_point_config, sounds)
 
     @app.get("/debug", response_class=HTMLResponse)
     def debug_page():
@@ -119,6 +130,21 @@ def create_app(
     @app.get("/api/photos")
     def api_photos():
         return [_photo_payload(path) for path in list_photo_files(photo_dir)]
+
+    @app.get("/api/sounds")
+    def api_sounds():
+        return [_sound_payload(path) for path in list_sound_files(sounds_dir)]
+
+    @app.post("/api/sounds/{filename}/play")
+    def api_play_sound(filename: str):
+        try:
+            path = _safe_sound_path(sounds_dir, filename)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Bad sound name") from None
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Sound not found")
+        sound_player(path)
+        return {"ok": True, "message": f"Играю звук: {sound_label(path.name)}"}
 
     @app.delete("/api/photos/{filename}")
     def api_delete_photo(filename: str):
@@ -224,6 +250,7 @@ def run_web_server(
     repo_dir: Optional[Path] = None,
     update_manager: Optional[UpdateManager] = None,
     debug_store: Optional[DebugStateStore] = None,
+    sounds_dir: Optional[Path] = None,
 ) -> threading.Thread:
     import uvicorn
 
@@ -236,6 +263,7 @@ def run_web_server(
         repo_dir=repo_dir,
         update_manager=update_manager,
         debug_store=debug_store,
+        sounds_dir=sounds_dir,
     )
     config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
@@ -264,6 +292,17 @@ def _safe_photo_path(photo_dir: Path, filename: str) -> Path:
     return path
 
 
+def _safe_sound_path(sounds_dir: Path, filename: str) -> Path:
+    if "/" in filename or "\\" in filename:
+        raise ValueError("nested paths are not allowed")
+    path = Path(sounds_dir) / filename
+    if path.resolve().parent != Path(sounds_dir).resolve():
+        raise ValueError("sound must stay inside sounds dir")
+    if path.suffix.lower() not in {".wav", ".mp3", ".ogg"}:
+        raise ValueError("not an audio file")
+    return path
+
+
 def _photo_payload(path: Path) -> dict[str, object]:
     return {
         "name": path.name,
@@ -273,16 +312,43 @@ def _photo_payload(path: Path) -> dict[str, object]:
     }
 
 
+def _sound_payload(path: Path) -> dict[str, object]:
+    return {
+        "name": path.name,
+        "label": sound_label(path.name),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+def sound_label(filename: str) -> str:
+    labels = {
+        "engine_idle.wav": "Моторчик",
+        "engine_rev.wav": "Рев мотора",
+        "fart_1.wav": "Пук 1",
+        "fart_2.wav": "Пук 2",
+        "horn.wav": "Бибик",
+        "robot_ready.wav": "Готов",
+        "photo_done.wav": "Фото",
+        "no_internet.wav": "Нет интернета",
+        "error.wav": "Ошибка",
+    }
+    if filename in labels:
+        return labels[filename]
+    return Path(filename).stem.replace("_", " ").strip().title()
+
+
 def _render_index(
     status: dict[str, object],
     photos: list[Path],
     key_status: dict[str, str],
     access_point_config: AccessPointConfig,
+    sounds: Optional[list[Path]] = None,
 ) -> str:
     photo_cards = "\n".join(_render_photo_card(path) for path in photos)
     if not photo_cards:
         photo_cards = '<div class="empty">Фотографий пока нет. Нажми A на пульте, и тут появится первая добыча.</div>'
     battery_card = _render_battery_card(status.get("battery"))
+    sound_buttons = _render_sound_buttons(sounds or [])
 
     return f"""
 <!doctype html>
@@ -429,6 +495,11 @@ def _render_index(
     .empty {{ border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--muted); background: #fff; }}
     .message {{ min-height: 24px; color: var(--muted); font-weight: 700; }}
     .small {{ font-size: 13px; }}
+    .sound-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
+    .sound-button {{ min-height: 44px; background: var(--sky); }}
+    .sound-button:nth-child(2n) {{ background: var(--mint); }}
+    .sound-button.engine {{ background: var(--sun); color: #2b2105; }}
+    .sound-button.fart {{ background: var(--coral); }}
     .limit-box {{
       margin-top: 10px;
       display: grid;
@@ -540,6 +611,15 @@ def _render_index(
             <button class="secondary" id="bluetoothDisconnectButton" type="button">Отключить</button>
           </div>
           <p class="message" id="bluetoothMessage"></p>
+        </section>
+
+        <section>
+          <h2>Звуки</h2>
+          <p class="small">Проверка динамика и маленький детский хаос по кнопке.</p>
+          <div class="sound-grid" id="soundGrid">
+            {sound_buttons}
+          </div>
+          <p class="message" id="soundMessage"></p>
         </section>
 
         <section>
@@ -744,6 +824,25 @@ def _render_index(
       }} catch (error) {{
         message.textContent = error.message;
       }}
+    }});
+
+    document.querySelectorAll('[data-play-sound]').forEach((button) => {{
+      button.addEventListener('click', async () => {{
+        const message = document.getElementById('soundMessage');
+        message.textContent = 'Играю...';
+        button.disabled = true;
+        try {{
+          const result = await jsonFetch('/api/sounds/' + encodeURIComponent(button.dataset.playSound) + '/play', {{
+            method: 'POST',
+            body: '{{}}'
+          }});
+          message.textContent = result.message;
+        }} catch (error) {{
+          message.textContent = error.message;
+        }} finally {{
+          button.disabled = false;
+        }}
+      }});
     }});
 
     document.getElementById('saveKeyButton').addEventListener('click', async () => {{
@@ -1403,6 +1502,31 @@ def _render_photo_card(path: Path) -> str:
   </div>
 </article>
 """
+
+
+def _render_sound_buttons(sounds: list[Path]) -> str:
+    preferred_order = [
+        "fart_1.wav",
+        "fart_2.wav",
+        "engine_rev.wav",
+        "engine_idle.wav",
+        "horn.wav",
+        "robot_ready.wav",
+        "photo_done.wav",
+    ]
+    by_name = {path.name: path for path in sounds}
+    ordered = [by_name[name] for name in preferred_order if name in by_name]
+    ordered.extend(path for path in sounds if path.name not in preferred_order)
+    if not ordered:
+        return '<div class="empty">Звуков пока нет. Запусти tools/generate_sample_audio.py.</div>'
+
+    buttons = []
+    for path in ordered:
+        name = html.escape(path.name)
+        label = html.escape(sound_label(path.name))
+        css_class = "engine" if path.name.startswith("engine_") else ("fart" if path.name.startswith("fart_") else "")
+        buttons.append(f'<button class="sound-button {css_class}" type="button" data-play-sound="{name}">{label}</button>')
+    return "\n".join(buttons)
 
 
 def _render_battery_card(raw_battery: object) -> str:
