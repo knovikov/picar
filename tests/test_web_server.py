@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import os
 from pathlib import Path
 
 
@@ -13,6 +14,8 @@ class WebServerTests(unittest.TestCase):
             (photo_dir / "b.jpg").write_bytes(b"two")
             (photo_dir / "a.jpg").write_bytes(b"one")
             (photo_dir / "notes.txt").write_text("not a photo", encoding="utf-8")
+            os.utime(photo_dir / "b.jpg", (100, 100))
+            os.utime(photo_dir / "a.jpg", (200, 200))
 
             status = SystemStatus(
                 robot_name="KidBot",

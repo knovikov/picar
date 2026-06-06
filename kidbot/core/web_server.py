@@ -27,7 +27,7 @@ logger = logging.getLogger("kidbot.web")
 def list_photo_files(photo_dir: Path) -> list[Path]:
     return sorted(
         (path for path in Path(photo_dir).iterdir() if path.suffix.lower() in PHOTO_EXTENSIONS),
-        key=lambda path: (path.stat().st_mtime, path.name),
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
         reverse=True,
     )
 
