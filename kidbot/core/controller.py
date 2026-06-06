@@ -51,9 +51,11 @@ class ControllerReader:
 
         self._pygame = pygame
         pygame.init()
+        pygame.joystick.quit()
         pygame.joystick.init()
         if pygame.joystick.get_count() <= self.device_index:
             logger.warning("no joystick found at index %s", self.device_index)
+            pygame.joystick.quit()
             self._connected = False
             return False
 
@@ -72,11 +74,17 @@ class ControllerReader:
 
         assert self._pygame is not None
         assert self._joystick is not None
-        self._pygame.event.pump()
+        try:
+            self._pygame.event.pump()
 
-        axes = {i: float(self._joystick.get_axis(i)) for i in range(self._joystick.get_numaxes())}
-        buttons = {i: bool(self._joystick.get_button(i)) for i in range(self._joystick.get_numbuttons())}
-        hats = {i: self._joystick.get_hat(i) for i in range(self._joystick.get_numhats())}
+            axes = {i: float(self._joystick.get_axis(i)) for i in range(self._joystick.get_numaxes())}
+            buttons = {i: bool(self._joystick.get_button(i)) for i in range(self._joystick.get_numbuttons())}
+            hats = {i: self._joystick.get_hat(i) for i in range(self._joystick.get_numhats())}
+        except Exception as exc:
+            logger.warning("controller disconnected: %s", exc)
+            self._joystick = None
+            self._connected = False
+            return JoystickState(connected=False)
 
         return JoystickState(
             connected=True,

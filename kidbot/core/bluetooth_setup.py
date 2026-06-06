@@ -12,6 +12,7 @@ logger = logging.getLogger("kidbot.controller")
 
 CommandRunner = Callable[..., object]
 BLUETOOTH_ADDRESS_RE = re.compile(r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ class BluetoothActionResult:
 
 def scan_bluetooth_devices(runner: CommandRunner = subprocess.run) -> list[BluetoothDevice]:
     _run_bluetooth_command(["bluetoothctl", "power", "on"], runner=runner, timeout=5)
-    _run_bluetooth_command(["bluetoothctl", "scan", "on"], runner=runner, timeout=8)
+    scan_result = _run_bluetooth_command(["bluetoothctl", "--timeout", "12", "scan", "on"], runner=runner, timeout=15)
     _run_bluetooth_command(["bluetoothctl", "scan", "off"], runner=runner, timeout=5)
 
     devices_result = _run_bluetooth_command(["bluetoothctl", "devices"], runner=runner, timeout=5)
@@ -44,7 +45,7 @@ def scan_bluetooth_devices(runner: CommandRunner = subprocess.run) -> list[Bluet
     paired = {
         device.address
         for device in parse_bluetooth_devices(
-            getattr(_run_bluetooth_command(["bluetoothctl", "paired-devices"], runner=runner, timeout=5), "stdout", "")
+            getattr(_run_bluetooth_command(["bluetoothctl", "devices", "Paired"], runner=runner, timeout=5), "stdout", "")
         )
     }
     connected = {
@@ -55,7 +56,10 @@ def scan_bluetooth_devices(runner: CommandRunner = subprocess.run) -> list[Bluet
     }
 
     devices = []
-    for device in parse_bluetooth_devices(getattr(devices_result, "stdout", "")):
+    found_devices = parse_bluetooth_devices(
+        f"{getattr(scan_result, 'stdout', '')}\n{getattr(devices_result, 'stdout', '')}"
+    )
+    for device in found_devices:
         devices.append(
             BluetoothDevice(
                 address=device.address,
@@ -72,9 +76,11 @@ def parse_bluetooth_devices(output: str) -> list[BluetoothDevice]:
     devices: list[BluetoothDevice] = []
     seen: set[str] = set()
     for line in output.splitlines():
-        line = line.strip()
-        if not line.startswith("Device "):
+        line = ANSI_RE.sub("", line).strip()
+        device_index = line.find("Device ")
+        if device_index < 0:
             continue
+        line = line[device_index:]
         parts = line.split(maxsplit=2)
         if len(parts) < 2 or not is_valid_bluetooth_address(parts[1]):
             continue
@@ -96,33 +102,44 @@ def connect_bluetooth_device(
     if not is_valid_bluetooth_address(address):
         return BluetoothActionResult(False, "Выбери Bluetooth-устройство из списка.")
 
-    commands = [
-        ["bluetoothctl", "power", "on"],
-        ["bluetoothctl", "agent", "on"],
-        ["bluetoothctl", "default-agent"],
-        ["bluetoothctl", "pair", address],
-        ["bluetoothctl", "trust", address],
-        ["bluetoothctl", "connect", address],
-    ]
+    _run_bluetooth_command(["bluetoothctl", "power", "on"], runner=runner, use_sudo=use_sudo, timeout=5)
+    _run_bluetooth_command(["bluetoothctl", "--timeout", "8", "scan", "on"], runner=runner, use_sudo=use_sudo, timeout=11)
+    _run_bluetooth_command(["bluetoothctl", "scan", "off"], runner=runner, use_sudo=use_sudo, timeout=5)
 
-    last_result = None
-    for command in commands:
-        last_result = _run_bluetooth_command(command, runner=runner, use_sudo=use_sudo, timeout=30)
-        if getattr(last_result, "returncode", 1) == 0:
-            continue
-        if command[1] == "pair" and _is_already_paired(last_result):
-            continue
+    script_commands = [
+        "power on",
+        "pairable on",
+        "agent NoInputNoOutput",
+        "default-agent",
+        f"pair {address}",
+        f"trust {address}",
+        f"connect {address}",
+        f"info {address}",
+        "quit",
+    ]
+    result = _run_bluetooth_script(script_commands, runner=runner, use_sudo=use_sudo, timeout=45)
+    output = f"{getattr(result, 'stdout', '')}\n{getattr(result, 'stderr', '')}"
+
+    if getattr(result, "returncode", 1) != 0 or _has_bluetooth_failure(output):
         return BluetoothActionResult(
             False,
             "Не получилось подключить пульт. Включи pairing mode и попробуй еще раз.",
-            getattr(last_result, "stdout", ""),
-            getattr(last_result, "stderr", ""),
+            getattr(result, "stdout", ""),
+            getattr(result, "stderr", ""),
+        )
+
+    if "Connected: yes" not in output and "Connection successful" not in output:
+        return BluetoothActionResult(
+            False,
+            "Пульт найден, но не подключился. Попробуй pairing mode еще раз.",
+            getattr(result, "stdout", ""),
+            getattr(result, "stderr", ""),
         )
 
     return BluetoothActionResult(
         True,
         "Пульт подключается. Через пару секунд статус должен стать 'подключен'.",
-        getattr(last_result, "stdout", "") if last_result else "",
+        getattr(result, "stdout", ""),
         "",
     )
 
@@ -170,6 +187,32 @@ def _run_bluetooth_command(
     return result
 
 
-def _is_already_paired(result: object) -> bool:
-    text = f"{getattr(result, 'stdout', '')}\n{getattr(result, 'stderr', '')}".lower()
-    return "alreadyexists" in text or "already exists" in text or "already paired" in text
+def _run_bluetooth_script(
+    commands: Sequence[str],
+    runner: CommandRunner,
+    use_sudo: bool = False,
+    timeout: int = 45,
+) -> object:
+    full_command = ["bluetoothctl", "--agent", "NoInputNoOutput"]
+    if use_sudo:
+        full_command = ["sudo", "-n", *full_command]
+    logger.debug("bluetooth script: %s", " ; ".join(commands))
+    try:
+        return runner(
+            full_command,
+            input="\n".join(commands) + "\n",
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(full_command, 127, "", str(exc))
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(full_command, 124, exc.stdout or "", exc.stderr or "timeout")
+
+
+def _has_bluetooth_failure(output: str) -> bool:
+    lowered = output.lower()
+    failures = ("failed to pair", "failed to connect", "not available", "not permitted", "authentication")
+    return any(failure in lowered for failure in failures)

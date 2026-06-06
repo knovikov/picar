@@ -127,5 +127,15 @@ if [[ -n "$SYSTEMCTL_PATH" ]]; then
   sudo chmod 440 /etc/sudoers.d/kidbot-service
 fi
 
+CHMOD_PATH="$(command -v chmod || true)"
+CHOWN_PATH="$(command -v chown || true)"
+if [[ -n "$CHMOD_PATH" && -n "$CHOWN_PATH" ]]; then
+  {
+    echo "$SERVICE_USER ALL=(root) NOPASSWD: $CHMOD_PATH 777 /opt/picar-x/picar-x.conf"
+    echo "$SERVICE_USER ALL=(root) NOPASSWD: $CHOWN_PATH -R $SERVICE_USER\\:$SERVICE_USER /opt/picar-x"
+  } | sudo tee /etc/sudoers.d/kidbot-picarx-config >/dev/null
+  sudo chmod 440 /etc/sudoers.d/kidbot-picarx-config
+fi
+
 echo "KidBot installed."
 echo "Start now with: sudo systemctl start kidbot.service"
