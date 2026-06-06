@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import html
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Callable, Optional
 
+from kidbot.core.config import DEFAULT_CONFIG
+from kidbot.core.openai_health import check_openai_api_key
 from kidbot.core.secrets import openai_key_status, save_openai_api_key
 from kidbot.core.status import SystemStatus
 from kidbot.core.wifi_setup import AccessPointConfig, connect_to_wifi, scan_wifi_networks, start_access_point
@@ -51,6 +54,7 @@ def create_app(
     status_provider: Callable[[], SystemStatus],
     env_path: Optional[Path] = None,
     access_point_config: Optional[AccessPointConfig] = None,
+    openai_model: Optional[str] = None,
 ):
     try:
         from fastapi import FastAPI, HTTPException, Request
@@ -61,6 +65,7 @@ def create_app(
     app = FastAPI(title="KidBot")
     env_path = env_path or Path(".env")
     access_point_config = access_point_config or AccessPointConfig()
+    openai_model = openai_model or DEFAULT_CONFIG["openai"]["chat_model"]
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -130,6 +135,15 @@ def create_app(
         save_openai_api_key(env_path, api_key)
         return {"ok": True, "message": "OpenAI API key сохранен.", **openai_key_status(env_path)}
 
+    @app.post("/api/openai-key/check")
+    def api_check_openai_key():
+        key = openai_key_status(env_path)
+        from kidbot.core.secrets import load_env_file
+
+        api_key = os.environ.get("OPENAI_API_KEY") or load_env_file(env_path).get("OPENAI_API_KEY", "")
+        result = check_openai_api_key(api_key, model=str(openai_model))
+        return {**result.__dict__, "masked": key["masked"]}
+
     return app
 
 
@@ -140,10 +154,17 @@ def run_web_server(
     port: int,
     env_path: Optional[Path] = None,
     access_point_config: Optional[AccessPointConfig] = None,
+    openai_model: Optional[str] = None,
 ) -> threading.Thread:
     import uvicorn
 
-    app = create_app(photo_dir, status_provider, env_path=env_path, access_point_config=access_point_config)
+    app = create_app(
+        photo_dir,
+        status_provider,
+        env_path=env_path,
+        access_point_config=access_point_config,
+        openai_model=openai_model,
+    )
     config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
     server.install_signal_handlers = lambda: None
@@ -296,6 +317,18 @@ def _render_index(
     .empty {{ border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--muted); background: #fff; }}
     .message {{ min-height: 24px; color: var(--muted); font-weight: 700; }}
     .small {{ font-size: 13px; }}
+    .limit-box {{
+      margin-top: 10px;
+      display: grid;
+      gap: 6px;
+      padding: 10px;
+      border-radius: 8px;
+      background: #f7fbff;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+    }}
+    .limit-box strong {{ color: var(--ink); }}
     @media (max-width: 820px) {{
       .shell {{ padding: 14px; }}
       header {{ grid-template-columns: 1fr; align-items: start; }}
@@ -354,8 +387,15 @@ def _render_index(
           <p class="small">Ключ сохраняется только на роботе в локальном .env файле.</p>
           <label for="apiKey">API key</label>
           <input id="apiKey" type="password" autocomplete="off" placeholder="sk-...">
-          <button style="margin-top: 12px" id="saveKeyButton" type="button">Сохранить ключ</button>
+          <div class="row" style="margin-top: 12px">
+            <button id="saveKeyButton" type="button">Сохранить ключ</button>
+            <button class="secondary" id="checkKeyButton" type="button">Проверить ключ</button>
+          </div>
           <p class="message" id="keyMessage">Сейчас: {html.escape(key_status["masked"])}</p>
+          <div class="limit-box" id="limitBox">
+            <div><strong>Лимиты:</strong> нажми “Проверить ключ”.</div>
+            <div class="small">Покажу remaining requests/tokens из OpenAI headers. Баланс денег обычным robot key не видно.</div>
+          </div>
         </section>
       </div>
     </div>
@@ -455,6 +495,41 @@ def _render_index(
         message.textContent = error.message;
       }}
     }});
+
+    document.getElementById('checkKeyButton').addEventListener('click', async () => {{
+      const message = document.getElementById('keyMessage');
+      const box = document.getElementById('limitBox');
+      message.textContent = 'Проверяю ключ...';
+      box.innerHTML = '<div><strong>Лимиты:</strong> спрашиваю OpenAI...</div>';
+      try {{
+        const result = await jsonFetch('/api/openai-key/check', {{
+          method: 'POST',
+          body: '{{}}'
+        }});
+        const limits = result.rate_limits || {{}};
+        message.textContent = result.message;
+        box.innerHTML = [
+          '<div><strong>Модель:</strong> ' + escapeHtml(result.model || 'unknown') + '</div>',
+          '<div><strong>Requests:</strong> ' + escapeHtml(limits.remaining_requests || '?') + ' осталось из ' + escapeHtml(limits.limit_requests || '?') + '</div>',
+          '<div><strong>Tokens:</strong> ' + escapeHtml(limits.remaining_tokens || '?') + ' осталось из ' + escapeHtml(limits.limit_tokens || '?') + '</div>',
+          '<div><strong>Reset:</strong> requests ' + escapeHtml(limits.reset_requests || '?') + ', tokens ' + escapeHtml(limits.reset_tokens || '?') + '</div>',
+          '<div class="small">Request ID: ' + escapeHtml(result.request_id || 'нет') + '</div>',
+          '<div class="small">' + escapeHtml(result.billing_note || '') + '</div>'
+        ].join('');
+      }} catch (error) {{
+        message.textContent = error.message;
+        box.innerHTML = '<div><strong>Лимиты:</strong> проверка не получилась.</div>';
+      }}
+    }});
+
+    function escapeHtml(value) {{
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }}
   </script>
 </body>
 </html>

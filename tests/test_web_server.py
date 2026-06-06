@@ -45,6 +45,30 @@ class WebServerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 delete_photo_file(photo_dir, "../secret.jpg")
 
+    def test_openai_panel_contains_check_key_button_and_limit_box(self):
+        from kidbot.core.status import SystemStatus
+        from kidbot.core.web_server import _render_index
+        from kidbot.core.wifi_setup import AccessPointConfig
+
+        status = {
+            **{
+                "robot_name": "KidBot",
+                "version": "0.1.0",
+                "wifi_connected": True,
+                "internet_connected": True,
+                "ip_address": "127.0.0.1",
+                "controller_connected": False,
+                "latest_error": None,
+                "uptime_seconds": 1,
+            }
+        }
+
+        html = _render_index(status, [], {"masked": "not set"}, AccessPointConfig())
+
+        self.assertIn("Проверить ключ", html)
+        self.assertIn("limitBox", html)
+        self.assertIn("/api/openai-key/check", html)
+
 
 if __name__ == "__main__":
     unittest.main()

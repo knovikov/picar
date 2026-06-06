@@ -168,6 +168,7 @@ def _start_web_server(config: dict, status: StatusTracker, logger: logging.Logge
             host=str(web_config.get("host", "0.0.0.0")),
             port=int(web_config.get("port", 8080)),
             env_path=env_path,
+            openai_model=str(config.get("openai", {}).get("chat_model", "gpt-5-mini")),
             access_point_config=AccessPointConfig(
                 ssid=str(setup_ap_config.get("ssid", "KidBot-Setup")),
                 password=str(setup_ap_config.get("password", "kidbot1234")),

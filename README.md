@@ -149,6 +149,7 @@ http://192.168.x.x:8080
 - `POST /api/setup/access-point`
 - `GET /api/openai-key`
 - `POST /api/openai-key`
+- `POST /api/openai-key/check`
 
 На главной странице можно:
 
@@ -159,6 +160,8 @@ http://192.168.x.x:8080
 - выбрать сеть и ввести пароль
 - включить setup-сеть вручную
 - сохранить `OPENAI_API_KEY`
+- проверить, что `OPENAI_API_KEY` работает
+- посмотреть remaining requests/tokens из OpenAI rate-limit headers, если OpenAI вернул эти headers
 
 ## 6.1 Setup-сеть как у умных камер
 
@@ -225,6 +228,18 @@ python3 -m kidbot.main
 
 Ключ также можно ввести через веб-интерфейс KidBot. Он сохраняется в локальный
 файл `.env` с правами `600`; этот файл добавлен в `.gitignore`.
+
+В веб-интерфейсе есть кнопка `Проверить ключ`. Она делает маленький тестовый
+запрос к OpenAI и показывает:
+
+- работает ли ключ
+- какая модель проверялась
+- `x-request-id`
+- сколько осталось requests/tokens до rate limit reset, если эти headers пришли
+
+Важно: это не показывает денежный баланс аккаунта. Баланс, месячный spend и
+подробный organization usage обычным robot API key не видны; для этого нужен
+OpenAI admin key или dashboard.
 
 Если ключа нет, KidBot все равно ездит, фотографирует, открывает веб-страницу,
 играет звуки, читает истории и говорит через `espeak-ng`. Chat, STT и Vision
