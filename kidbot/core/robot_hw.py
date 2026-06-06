@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
+import os
+import pwd
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -32,7 +35,7 @@ class RobotHardware:
         try:
             from picarx import Picarx
 
-            self._picar = Picarx()
+            self._picar = _build_picarx(Picarx)
         except Exception as exc:
             logger.warning("PiCar-X hardware unavailable; switching to mock mode: %s", exc)
             self.mock = True
@@ -176,7 +179,7 @@ class RobotHardware:
                 value = getattr(owner, attr_name, None)
                 if value is not None and not callable(value):
                     return value
-        return None
+        return _read_robot_hat_battery_voltage()
 
     def _mock_battery_voltage(self, battery_config: dict[str, Any]) -> float | None:
         if "mock_voltage" not in battery_config:
@@ -193,6 +196,48 @@ def _round_distance_cm(distance: float) -> float:
 
 def _round_voltage(voltage: float) -> float:
     return float(Decimal(str(voltage)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _build_picarx(picarx_cls: type) -> Any:
+    original_getlogin = os.getlogin
+
+    def getlogin_with_systemd_fallback() -> str:
+        try:
+            return original_getlogin()
+        except OSError:
+            return _login_user_fallback()
+
+    os.getlogin = getlogin_with_systemd_fallback
+    try:
+        return picarx_cls()
+    finally:
+        os.getlogin = original_getlogin
+
+
+def _login_user_fallback() -> str:
+    for env_name in ("LOGNAME", "USER", "SUDO_USER"):
+        username = os.environ.get(env_name)
+        if username:
+            return username
+    return pwd.getpwuid(os.getuid()).pw_name
+
+
+def _read_robot_hat_battery_voltage() -> Any:
+    for module_name in ("robot_hat.device", "robot_hat.utils"):
+        try:
+            module = importlib.import_module(module_name)
+            method = getattr(module, "get_battery_voltage", None)
+            if callable(method):
+                return method()
+        except Exception as exc:
+            logger.debug("robot-hat battery reader unavailable from %s: %s", module_name, exc)
+    try:
+        module = importlib.import_module("robot_hat")
+        adc_cls = getattr(module, "ADC")
+        return adc_cls("A4").read_voltage() * 3
+    except Exception as exc:
+        logger.debug("robot-hat A4 battery ADC unavailable: %s", exc)
+    return None
 
 
 def _coerce_voltage(raw_voltage: Any) -> float | None:

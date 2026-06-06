@@ -3,6 +3,59 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVICE_USER="${SUDO_USER:-$USER}"
+SUNFOUNDER_DIR="${SUNFOUNDER_DIR:-/opt/sunfounder}"
+
+run_as_service_user() {
+  if [[ "$(id -un)" == "$SERVICE_USER" ]]; then
+    "$@"
+  else
+    sudo -H -u "$SERVICE_USER" "$@"
+  fi
+}
+
+clone_or_update_repo() {
+  local repo_url="$1"
+  local repo_dir="$2"
+  local branch="${3:-}"
+
+  if [[ -d "$repo_dir/.git" ]]; then
+    if [[ -n "$branch" ]]; then
+      run_as_service_user git -C "$repo_dir" fetch origin "$branch" --depth 1 || true
+      run_as_service_user git -C "$repo_dir" checkout "$branch" || true
+    fi
+    run_as_service_user git -C "$repo_dir" pull --ff-only || true
+    return
+  fi
+
+  if [[ -e "$repo_dir" ]]; then
+    echo "ERROR: $repo_dir exists but is not a git checkout." >&2
+    exit 1
+  fi
+
+  if [[ -n "$branch" ]]; then
+    run_as_service_user git clone -b "$branch" "$repo_url" "$repo_dir" --depth 1
+  else
+    run_as_service_user git clone "$repo_url" "$repo_dir" --depth 1
+  fi
+}
+
+install_sunfounder_sdk() {
+  echo "Installing SunFounder PiCar-X SDK"
+  sudo mkdir -p "$SUNFOUNDER_DIR" /opt/picar-x
+  sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$SUNFOUNDER_DIR" /opt/picar-x
+  sudo chmod 775 /opt/picar-x
+
+  clone_or_update_repo "https://github.com/sunfounder/robot-hat.git" "$SUNFOUNDER_DIR/robot-hat" "2.5.x"
+  (cd "$SUNFOUNDER_DIR/robot-hat" && sudo python3 install.py)
+
+  clone_or_update_repo "https://github.com/sunfounder/vilib.git" "$SUNFOUNDER_DIR/vilib"
+  (cd "$SUNFOUNDER_DIR/vilib" && sudo python3 install.py)
+
+  clone_or_update_repo "https://github.com/sunfounder/picar-x.git" "$SUNFOUNDER_DIR/picar-x" "2.1.x"
+  (cd "$SUNFOUNDER_DIR/picar-x" && sudo python3 -m pip install . --break-system-packages)
+
+  sudo chown -R "$SERVICE_USER:$SERVICE_USER" /opt/picar-x
+}
 
 echo "Installing KidBot from $REPO_DIR"
 
@@ -10,6 +63,8 @@ sudo apt-get update
 sudo apt-get install -y \
   git \
   python3-pip \
+  python3-setuptools \
+  python3-smbus \
   python3-venv \
   python3-pygame \
   python3-opencv \
@@ -21,6 +76,8 @@ sudo apt-get install -y \
   joystick \
   alsa-utils \
   ffmpeg
+
+install_sunfounder_sdk
 
 sudo systemctl enable --now NetworkManager || true
 sudo systemctl enable --now bluetooth || true
@@ -39,6 +96,7 @@ mkdir -p photos logs assets/sounds assets/music assets/stories
 touch .env
 chmod 600 .env
 python3 tools/generate_sample_audio.py
+sudo chown -R "$SERVICE_USER:$SERVICE_USER" .venv photos logs assets .env
 
 sudo cp systemd/kidbot.service /etc/systemd/system/kidbot.service
 sudo cp systemd/kidbot-updater.service /etc/systemd/system/kidbot-updater.service
