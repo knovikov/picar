@@ -48,6 +48,13 @@ speed:
   acceleration_per_second: 55
   braking_per_second: 90
 
+engine_sound:
+  enabled: true
+  min_speed: 4
+  rev_speed: 18
+  idle_file: "engine_idle.wav"
+  rev_file: "engine_rev.wav"
+
 head:
   pan_min: -45
   pan_max: 45

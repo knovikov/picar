@@ -126,7 +126,7 @@ def main() -> None:
                     logger.info("controller connected: %s", state.name)
                 controller_was_connected = True
                 watchdog.mark_controller_event()
-                _drive_from_controller(config, state, robot, steering_smoother, speed_limiter, dt, debug_store)
+                _drive_from_controller(config, state, robot, media, steering_smoother, speed_limiter, dt, debug_store)
                 _move_head_from_dpad(config, state, robot, debug_store)
                 _handle_button_events(button_events, actions)
                 if button_tracker.combo_long_pressed("rollback", named_buttons, ("select", "start"), hold_seconds=2.0):
@@ -135,12 +135,14 @@ def main() -> None:
             else:
                 if controller_was_connected:
                     robot.stop()
+                    media.stop_engine_sound()
                     voice.say("Пульт потерялся. Я остановился.")
                     logger.warning("controller disconnected")
                 controller_was_connected = False
 
             if watchdog.expired():
                 robot.stop()
+                media.stop_engine_sound()
                 watchdog.stopped_due_to_timeout = True
 
             if now - last_front_sensor_check >= front_sensor_interval:
@@ -253,6 +255,7 @@ def _drive_from_controller(
     config: dict,
     state,
     robot: RobotHardware,
+    media: MediaPlayer,
     steering_smoother: Smoother,
     speed_limiter: RateLimiter,
     dt: float,
@@ -276,6 +279,7 @@ def _drive_from_controller(
     smooth_steering = steering_smoother.update(command.steering_angle)
     debug_store.record_drive(smooth_speed, smooth_steering)
     robot.drive(smooth_speed, smooth_steering)
+    media.update_engine_sound(smooth_speed, config.get("engine_sound", {}))
 
 
 def _move_head_from_dpad(config: dict, state, robot: RobotHardware, debug_store: DebugStateStore) -> None:
