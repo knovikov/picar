@@ -800,9 +800,164 @@ def _render_debug_page() -> str:
     .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .stat { background: #f7fbff; border-left: 4px solid var(--sky); border-radius: 6px; padding: 10px; min-height: 58px; }
     .stat strong { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
-    .controller-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-    .button-cell { min-height: 42px; border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; font-weight: 900; background: #fff; }
-    .button-cell.on { background: var(--sun); color: #241b00; border-color: #d79a20; }
+    .controller-shell {
+      position: relative;
+      width: 100%;
+      max-width: 700px;
+      margin: 0 auto;
+      aspect-ratio: 2.55 / 1;
+      border-radius: 80px;
+      background: linear-gradient(180deg, #f06d68, #d94748);
+      border: 5px solid rgba(255,255,255,.78);
+      box-shadow: inset 0 -12px 22px rgba(72, 10, 14, .16), 0 14px 28px rgba(31, 41, 55, .13);
+      overflow: visible;
+    }
+    .controller-shell::after {
+      content: "8BitDo Lite 2";
+      position: absolute;
+      left: 42%;
+      top: 25%;
+      color: rgba(255,255,255,.72);
+      font-weight: 900;
+      font-size: clamp(12px, 2vw, 18px);
+      letter-spacing: 0;
+      transform: translateX(-50%);
+    }
+    .pad-button {
+      position: absolute;
+      border: 2px solid rgba(57, 67, 82, .18);
+      background: #f3f4ef;
+      color: #687079;
+      display: grid;
+      place-items: center;
+      font-weight: 950;
+      letter-spacing: 0;
+      box-shadow: 0 4px 0 rgba(47, 55, 71, .22), inset 0 2px 4px rgba(255,255,255,.9);
+      transition: transform .08s ease, background .08s ease, color .08s ease, box-shadow .08s ease;
+      user-select: none;
+    }
+    .pad-button.on {
+      background: var(--sun);
+      color: #241b00;
+      border-color: #d79a20;
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 rgba(47,55,71,.2), 0 0 0 5px rgba(244,183,64,.23);
+    }
+    .face-button {
+      width: 9%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      font-size: clamp(13px, 2vw, 24px);
+    }
+    .mini-button {
+      width: 6%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      font-size: clamp(12px, 1.5vw, 18px);
+    }
+    .top-button {
+      width: 6.7%;
+      height: 12%;
+      border-radius: 999px;
+      font-size: clamp(11px, 1.4vw, 16px);
+      background: #dc4b4d;
+      color: rgba(255,255,255,.78);
+      border-color: rgba(120,20,24,.28);
+    }
+    .centered-button { transform: translateX(-50%); }
+    .centered-button.on { transform: translateX(-50%) translateY(2px); }
+    .shoulder {
+      top: -6%;
+      width: 16%;
+      height: 12%;
+      border-radius: 18px 18px 8px 8px;
+      background: #f6f5ee;
+      color: #46505f;
+    }
+    .stick {
+      width: 15%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #f8f7ef;
+      color: #5d6673;
+      font-size: clamp(12px, 2vw, 22px);
+    }
+    .stick::after {
+      content: "";
+      position: absolute;
+      inset: 18%;
+      border-radius: 50%;
+      border: 4px solid rgba(91,101,113,.22);
+      background: rgba(255,255,255,.24);
+    }
+    .stick span { position: relative; z-index: 1; }
+    .dpad-cluster {
+      position: absolute;
+      left: 32%;
+      top: 58%;
+      width: 16%;
+      aspect-ratio: 1;
+      transform: translate(-50%, -50%);
+    }
+    .dpad-piece {
+      width: 38%;
+      height: 38%;
+      border-radius: 8px;
+      font-size: clamp(11px, 1.4vw, 16px);
+    }
+    .dpad-up { left: 31%; top: 0; }
+    .dpad-right { right: 0; top: 31%; }
+    .dpad-down { left: 31%; bottom: 0; }
+    .dpad-left { left: 0; top: 31%; }
+    .dpad-center {
+      position: absolute;
+      left: 31%;
+      top: 31%;
+      width: 38%;
+      height: 38%;
+      border-radius: 50%;
+      background: #f3f4ef;
+      border: 2px solid rgba(57,67,82,.18);
+      display: grid;
+      place-items: center;
+      font-weight: 950;
+      color: #687079;
+      box-shadow: 0 4px 0 rgba(47,55,71,.22), inset 0 2px 4px rgba(255,255,255,.9);
+    }
+    .mode-dots {
+      position: absolute;
+      left: 38%;
+      bottom: 18%;
+      width: 13%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10%;
+    }
+    .mode-dots span {
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #f7f4ec;
+      border: 2px solid rgba(57,67,82,.18);
+      box-shadow: 0 3px 0 rgba(47,55,71,.2), inset 0 2px 4px rgba(255,255,255,.9);
+    }
+    .raw-strip {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .raw-button {
+      min-height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+      font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 900;
+    }
+    .raw-button.on { background: #dff7ef; color: #146b50; border-color: #9edcc8; }
     canvas { width: 100%; display: block; border: 1px solid var(--line); border-radius: 8px; background: #101828; }
     #stickCanvas { height: 230px; }
     #waveCanvas { height: 150px; }
@@ -813,7 +968,7 @@ def _render_debug_page() -> str:
     @media (max-width: 820px) {
       .grid, .stats { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
-      .controller-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .raw-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -837,9 +992,38 @@ def _render_debug_page() -> str:
         </div>
       </section>
 
-      <section>
+      <section class="wide">
         <h2>Кнопки</h2>
-        <div class="controller-grid" id="controllerGrid"></div>
+        <div class="controller-shell controllerShell" id="controllerGrid" aria-label="8BitDo Lite 2 layout">
+          <div class="pad-button shoulder" id="btn-l" style="left: 6%">L</div>
+          <div class="pad-button shoulder" id="btn-l2" style="left: 24%">L2</div>
+          <div class="pad-button shoulder" id="btn-r2" style="right: 24%">R2</div>
+          <div class="pad-button shoulder" id="btn-r" style="right: 6%">R</div>
+
+          <div class="pad-button top-button" id="btn-select" style="left: 23%; top: 14%">-</div>
+          <div class="pad-button top-button" id="btn-start" style="right: 23%; top: 14%">+</div>
+          <div class="mini-button pad-button centered-button" id="btn-pair" style="left: 50%; top: 11%">pair</div>
+
+          <div class="pad-button stick" id="btn-l3" style="left: 6%; top: 27%"><span>L3</span></div>
+          <div class="dpad-cluster dpadCluster" id="dpadCluster">
+            <div class="pad-button dpad-piece dpad-up" id="btn-dpad-up">↑</div>
+            <div class="pad-button dpad-piece dpad-right" id="btn-dpad-right">→</div>
+            <div class="pad-button dpad-piece dpad-down" id="btn-dpad-down">↓</div>
+            <div class="pad-button dpad-piece dpad-left" id="btn-dpad-left">←</div>
+            <div class="dpad-center">L</div>
+          </div>
+
+          <div class="pad-button face-button faceCluster" id="btn-y" style="right: 18%; top: 29%">Y</div>
+          <div class="pad-button face-button faceCluster" id="btn-x" style="right: 8%; top: 18%">X</div>
+          <div class="pad-button face-button faceCluster" id="btn-a" style="right: 8%; top: 43%">A</div>
+          <div class="pad-button face-button faceCluster" id="btn-b" style="right: 18%; top: 54%">B</div>
+          <div class="pad-button stick" id="btn-r3" style="right: 28%; top: 48%"><span>R3</span></div>
+          <div class="mode-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+
+          <div class="pad-button mini-button" id="btn-star" style="left: 9%; bottom: 14%">★</div>
+          <div class="pad-button mini-button" id="btn-home" style="right: 13%; bottom: 14%">⌂</div>
+        </div>
+        <div class="raw-strip" id="rawButtonStrip"></div>
       </section>
 
       <section>
@@ -868,15 +1052,31 @@ def _render_debug_page() -> str:
   </main>
 
   <script>
-    const buttons = ['a','b','x','y','l1','r1','l2','r2','select','start'];
-    const controllerGrid = document.getElementById('controllerGrid');
-    buttons.forEach((name) => {
+    const controllerButtons = [
+      { id: 'btn-a', names: ['a'], raw: 0 },
+      { id: 'btn-b', names: ['b'], raw: 1 },
+      { id: 'btn-x', names: ['x'], raw: 2 },
+      { id: 'btn-y', names: ['y'], raw: 3 },
+      { id: 'btn-l', names: ['l1', 'l'], raw: 4 },
+      { id: 'btn-r', names: ['r1', 'r'], raw: 5 },
+      { id: 'btn-l2', names: ['l2'], raw: 6 },
+      { id: 'btn-r2', names: ['r2'], raw: 7 },
+      { id: 'btn-select', names: ['select'], raw: 8 },
+      { id: 'btn-start', names: ['start'], raw: 9 },
+      { id: 'btn-star', names: ['star'], raw: 10 },
+      { id: 'btn-home', names: ['home'], raw: 11 },
+      { id: 'btn-l3', names: ['l3'], raw: 12 },
+      { id: 'btn-r3', names: ['r3'], raw: 13 },
+      { id: 'btn-pair', names: ['pair'], raw: 14 }
+    ];
+    const rawButtonStrip = document.getElementById('rawButtonStrip');
+    for (let index = 0; index < 16; index += 1) {
       const div = document.createElement('div');
-      div.className = 'button-cell';
-      div.id = 'button-' + name;
-      div.textContent = name.toUpperCase();
-      controllerGrid.appendChild(div);
-    });
+      div.className = 'raw-button';
+      div.id = 'raw-button-' + index;
+      div.textContent = String(index);
+      rawButtonStrip.appendChild(div);
+    }
 
     let lastPayload = null;
     let waveMode = 'idle';
@@ -910,10 +1110,7 @@ def _render_debug_page() -> str:
       document.getElementById('driveSpeed').textContent = drive.speed ?? 0;
       document.getElementById('driveSteering').textContent = drive.steering_angle ?? 0;
 
-      const named = controller.named_buttons || {};
-      buttons.forEach((name) => {
-        document.getElementById('button-' + name).classList.toggle('on', Boolean(named[name]));
-      });
+      renderControllerLayout(controller);
 
       document.getElementById('eventConsole').textContent = (payload.events || [])
         .slice(-14)
@@ -924,6 +1121,31 @@ def _render_debug_page() -> str:
         .map((item) => '[' + item.level + '] ' + item.logger + ': ' + item.message)
         .join('\\n');
       drawSticks(controller.axes || {});
+    }
+
+    function renderControllerLayout(controller) {
+      const named = controller.named_buttons || {};
+      const raw = controller.buttons || {};
+      const hats = controller.hats || {};
+      controllerButtons.forEach((button) => {
+        const element = document.getElementById(button.id);
+        const namedPressed = button.names.some((name) => Boolean(named[name]));
+        const rawPressed = Boolean(raw[String(button.raw)]);
+        element.classList.toggle('on', namedPressed || rawPressed);
+      });
+
+      for (let index = 0; index < 16; index += 1) {
+        const element = document.getElementById('raw-button-' + index);
+        element.classList.toggle('on', Boolean(raw[String(index)]));
+      }
+
+      const hat = hats['0'] || [0, 0];
+      const x = Number(hat[0] || 0);
+      const y = Number(hat[1] || 0);
+      document.getElementById('btn-dpad-up').classList.toggle('on', y > 0);
+      document.getElementById('btn-dpad-right').classList.toggle('on', x > 0);
+      document.getElementById('btn-dpad-down').classList.toggle('on', y < 0);
+      document.getElementById('btn-dpad-left').classList.toggle('on', x < 0);
     }
 
     function drawSticks(axes) {

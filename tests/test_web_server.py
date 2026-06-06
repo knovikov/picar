@@ -144,6 +144,36 @@ class WebServerTests(unittest.TestCase):
         self.assertIn("logConsole", html)
         self.assertIn("waveCanvas", html)
 
+    def test_debug_page_draws_8bitdo_lite2_controller_layout(self):
+        from kidbot.core.web_server import _render_debug_page
+
+        html = _render_debug_page()
+
+        self.assertIn("controllerShell", html)
+        self.assertIn("faceCluster", html)
+        self.assertIn("dpadCluster", html)
+        for button_id in (
+            "btn-a",
+            "btn-b",
+            "btn-x",
+            "btn-y",
+            "btn-l",
+            "btn-r",
+            "btn-l2",
+            "btn-r2",
+            "btn-select",
+            "btn-start",
+            "btn-star",
+            "btn-home",
+            "btn-l3",
+            "btn-r3",
+            "btn-dpad-up",
+            "btn-dpad-right",
+            "btn-dpad-down",
+            "btn-dpad-left",
+        ):
+            self.assertIn(button_id, html)
+
     def test_debug_websocket_sends_snapshot(self):
         from fastapi.testclient import TestClient
 
