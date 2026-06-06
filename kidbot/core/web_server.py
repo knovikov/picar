@@ -792,6 +792,7 @@ def _render_debug_page() -> str:
     h2 { margin: 0 0 10px; font-size: 20px; letter-spacing: 0; }
     a { color: var(--sky); font-weight: 800; text-decoration: none; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+    .grid > section { min-width: 0; }
     section { border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.88); padding: 14px; box-shadow: 0 10px 22px rgba(26,35,50,.08); }
     .wide { grid-column: 1 / -1; }
     .badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--line); font-weight: 800; }
@@ -803,13 +804,17 @@ def _render_debug_page() -> str:
     .stat small { display: block; color: var(--muted); font-weight: 800; margin-top: 4px; }
     .stat.sensor-ok { border-left-color: var(--mint); background: #f5fffb; }
     .stat.sensor-near { border-left-color: var(--coral); background: #fff7f5; }
+    .controller-frame {
+      width: min(100%, 720px);
+      min-width: 0;
+      margin: 4px auto 0;
+      padding-top: 18px;
+    }
     .controller-shell {
       position: relative;
       width: 100%;
-      max-width: 700px;
-      margin: 0 auto;
       aspect-ratio: 2.55 / 1;
-      border-radius: 80px;
+      border-radius: clamp(34px, 9vw, 80px);
       background: linear-gradient(180deg, #f06d68, #d94748);
       border: 5px solid rgba(255,255,255,.78);
       box-shadow: inset 0 -12px 22px rgba(72, 10, 14, .16), 0 14px 28px rgba(31, 41, 55, .13);
@@ -968,10 +973,29 @@ def _render_debug_page() -> str:
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     button { appearance: none; border: 0; border-radius: 8px; min-height: 38px; padding: 8px 12px; font-weight: 900; color: white; background: var(--ink); cursor: pointer; }
     button.secondary { background: var(--violet); }
-    @media (max-width: 820px) {
-      .grid, .stats { grid-template-columns: 1fr; }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
+      .controller-frame { width: min(100%, 680px); }
+    }
+    @media (max-width: 640px) {
+      .shell { padding: 14px; }
+      h1 { font-size: 30px; }
+      h2 { font-size: 19px; }
+      section { padding: 12px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stat { min-height: 62px; padding: 9px; }
+      .controller-frame { width: 100%; padding-top: 14px; }
       .raw-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .raw-button { min-height: 30px; }
+      #stickCanvas { height: 180px; }
+      #waveCanvas { height: 130px; }
+    }
+    @media (max-width: 430px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .raw-strip { gap: 5px; }
+      .pad-button { border-width: 1px; }
+      .controller-shell { border-width: 4px; }
     }
   </style>
 </head>
@@ -998,36 +1022,38 @@ def _render_debug_page() -> str:
 
       <section class="wide">
         <h2>Кнопки</h2>
-        <div class="controller-shell controllerShell" id="controllerGrid" aria-label="8BitDo Lite 2 layout">
-          <div class="pad-button shoulder" id="btn-l" style="left: 6%">L</div>
-          <div class="pad-button shoulder" id="btn-l2" style="left: 24%">L2</div>
-          <div class="pad-button shoulder" id="btn-r2" style="right: 24%">R2</div>
-          <div class="pad-button shoulder" id="btn-r" style="right: 6%">R</div>
+        <div class="controller-frame controllerFrame">
+          <div class="controller-shell controllerShell" id="controllerGrid" aria-label="8BitDo Lite 2 layout">
+            <div class="pad-button shoulder" id="btn-l" style="left: 6%">L</div>
+            <div class="pad-button shoulder" id="btn-l2" style="left: 24%">L2</div>
+            <div class="pad-button shoulder" id="btn-r2" style="right: 24%">R2</div>
+            <div class="pad-button shoulder" id="btn-r" style="right: 6%">R</div>
 
-          <div class="pad-button top-button" id="btn-select" style="left: 23%; top: 14%">-</div>
-          <div class="pad-button top-button" id="btn-start" style="right: 23%; top: 14%">+</div>
-          <div class="mini-button pad-button centered-button" id="btn-pair" style="left: 50%; top: 11%">pair</div>
+            <div class="pad-button top-button" id="btn-select" style="left: 23%; top: 14%">-</div>
+            <div class="pad-button top-button" id="btn-start" style="right: 23%; top: 14%">+</div>
+            <div class="mini-button pad-button centered-button" id="btn-pair" style="left: 50%; top: 11%">pair</div>
 
-          <div class="pad-button stick" id="btn-l3" style="left: 6%; top: 27%"><span>L3</span></div>
-          <div class="dpad-cluster dpadCluster" id="dpadCluster">
-            <div class="pad-button dpad-piece dpad-up" id="btn-dpad-up">↑</div>
-            <div class="pad-button dpad-piece dpad-right" id="btn-dpad-right">→</div>
-            <div class="pad-button dpad-piece dpad-down" id="btn-dpad-down">↓</div>
-            <div class="pad-button dpad-piece dpad-left" id="btn-dpad-left">←</div>
-            <div class="dpad-center">L</div>
+            <div class="pad-button stick" id="btn-l3" style="left: 6%; top: 27%"><span>L3</span></div>
+            <div class="dpad-cluster dpadCluster" id="dpadCluster">
+              <div class="pad-button dpad-piece dpad-up" id="btn-dpad-up">↑</div>
+              <div class="pad-button dpad-piece dpad-right" id="btn-dpad-right">→</div>
+              <div class="pad-button dpad-piece dpad-down" id="btn-dpad-down">↓</div>
+              <div class="pad-button dpad-piece dpad-left" id="btn-dpad-left">←</div>
+              <div class="dpad-center">L</div>
+            </div>
+
+            <div class="pad-button face-button faceCluster" id="btn-y" style="right: 18%; top: 29%">Y</div>
+            <div class="pad-button face-button faceCluster" id="btn-x" style="right: 8%; top: 18%">X</div>
+            <div class="pad-button face-button faceCluster" id="btn-a" style="right: 8%; top: 43%">A</div>
+            <div class="pad-button face-button faceCluster" id="btn-b" style="right: 18%; top: 54%">B</div>
+            <div class="pad-button stick" id="btn-r3" style="right: 28%; top: 48%"><span>R3</span></div>
+            <div class="mode-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+
+            <div class="pad-button mini-button" id="btn-star" style="left: 9%; bottom: 14%">★</div>
+            <div class="pad-button mini-button" id="btn-home" style="right: 13%; bottom: 14%">⌂</div>
           </div>
-
-          <div class="pad-button face-button faceCluster" id="btn-y" style="right: 18%; top: 29%">Y</div>
-          <div class="pad-button face-button faceCluster" id="btn-x" style="right: 8%; top: 18%">X</div>
-          <div class="pad-button face-button faceCluster" id="btn-a" style="right: 8%; top: 43%">A</div>
-          <div class="pad-button face-button faceCluster" id="btn-b" style="right: 18%; top: 54%">B</div>
-          <div class="pad-button stick" id="btn-r3" style="right: 28%; top: 48%"><span>R3</span></div>
-          <div class="mode-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-
-          <div class="pad-button mini-button" id="btn-star" style="left: 9%; bottom: 14%">★</div>
-          <div class="pad-button mini-button" id="btn-home" style="right: 13%; bottom: 14%">⌂</div>
+          <div class="raw-strip" id="rawButtonStrip"></div>
         </div>
-        <div class="raw-strip" id="rawButtonStrip"></div>
       </section>
 
       <section>

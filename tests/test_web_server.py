@@ -151,6 +151,7 @@ class WebServerTests(unittest.TestCase):
 
         html = _render_debug_page()
 
+        self.assertIn("controllerFrame", html)
         self.assertIn("controllerShell", html)
         self.assertIn("faceCluster", html)
         self.assertIn("dpadCluster", html)
@@ -175,6 +176,15 @@ class WebServerTests(unittest.TestCase):
             "btn-dpad-left",
         ):
             self.assertIn(button_id, html)
+
+    def test_debug_page_contains_responsive_layout_guards(self):
+        from kidbot.core.web_server import _render_debug_page
+
+        html = _render_debug_page()
+
+        self.assertIn(".grid > section { min-width: 0; }", html)
+        self.assertIn("@media (max-width: 640px)", html)
+        self.assertIn(".stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }", html)
 
     def test_debug_websocket_sends_snapshot(self):
         from fastapi.testclient import TestClient
